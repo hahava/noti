@@ -179,7 +179,12 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
   if (step === "environment" && env) {
     const portRow = (port: number, label: string) => (
       <li key={port}>
-        <span className={env.ports[port] ? "text-ok" : "text-warn"}>{env.ports[port] ? "비어 있음" : "사용 중"}</span> {port} — {label}
+        {env.ports[port] === null ? (
+          <span className="muted">확인 불가</span>
+        ) : (
+          <span className={env.ports[port] ? "text-ok" : "text-warn"}>{env.ports[port] ? "비어 있음" : "사용 중"}</span>
+        )}{" "}
+        {port} — {label}
       </li>
     );
     body = (
@@ -220,6 +225,12 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
             {portRow(11434, "Ollama")}
           </ul>
         </div>
+        {env.networkMode === "bridge" && (
+          <p className="muted small">
+            Docker Desktop 방식으로 설치합니다. 이 컴퓨터의 127.0.0.1 주소(예: Ollama)를 적으면 컨테이너에서 닿는 주소로 자동으로 바꿔 연결합니다.
+            포트가 겹치면 설치 단계에서 알려 줍니다.
+          </p>
+        )}
         {env.pending && <div className="alert alert--warn">이전에 끝나지 않은 설치가 있습니다. 같은 비밀값으로 이어서 진행합니다.</div>}
       </div>
     );

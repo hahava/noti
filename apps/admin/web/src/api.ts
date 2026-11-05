@@ -155,7 +155,9 @@ const json = (body: unknown) => JSON.stringify(body);
 export interface SetupEnvironment {
   docker: { available: boolean; version: string; gpu: boolean; os: string; error: string };
   ollama: { found: boolean; url: string; version?: string };
-  ports: Record<string, boolean>;
+  /** null = 확인 불가 (Docker Desktop 방식에서는 어드민이 호스트 포트를 볼 수 없다) */
+  ports: Record<string, boolean | null>;
+  networkMode: "host" | "bridge";
   appImage: string;
   pending: boolean;
 }

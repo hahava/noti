@@ -20,6 +20,7 @@ import {
   imageExists,
   inspectContainer,
   pullImage,
+  ensureNetwork,
   removeContainer,
   runContainer,
 } from "./docker.js";
@@ -42,6 +43,31 @@ const OLLAMA_IMAGE = "ollama/ollama:0.40.0";
 const NAMES = { db: "noty-db", ollama: "noty-ollama", api: "noty-api", collab: "noty-collab" };
 const VOLUMES = { db: "noty_pgdata", ollama: "noty_ollama", data: "noty_data" };
 const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
+
+/**
+ * 컨테이너 네트워크 방식 (deploy/install.sh 가 정한다)
+ * - host  : Linux. 모든 컨테이너가 서버의 127.0.0.1 을 같이 쓴다. 주소를 그대로 쓴다.
+ * - bridge: Docker Desktop(macOS·Windows). 컨테이너는 Docker 네트워크 "noty" 안에서 서로를 이름으로 찾고,
+ *           필요한 포트만 호스트에 연다. 사용자가 적은 127.0.0.1(호스트 컴퓨터)은 host.docker.internal 로 바꿔 접속한다.
+ */
+export const NETWORK_MODE: "host" | "bridge" = process.env.NOTY_DOCKER_NETWORK === "bridge" ? "bridge" : "host";
+const DOCKER_NETWORK = "noty";
+const isBridge = () => NETWORK_MODE === "bridge";
+
+/** 사용자가 적은 주소(호스트 컴퓨터 기준)를 어드민·서비스 컨테이너에서 닿는 주소로 바꾼다. */
+export function toContainerUrl(url: string): string {
+  if (!isBridge() || !url) return url;
+  try {
+    const parsed = new URL(url);
+    if (["127.0.0.1", "localhost", "0.0.0.0", "[::1]"].includes(parsed.hostname)) {
+      parsed.hostname = "host.docker.internal";
+      return parsed.toString().replace(/\/$/, url.endsWith("/") ? "/" : "");
+    }
+  } catch {
+    // URL 이 아니면 그대로
+  }
+  return url;
+}
 
 /* ------------------------------------------------------------------ 설치 코드 */
 
@@ -109,20 +135,21 @@ export async function inspectEnvironment() {
 
   let ollama: { found: boolean; url: string; version?: string } = { found: false, url: DEFAULT_OLLAMA_URL };
   try {
-    const res = await fetchJson<{ version: string }>(`${DEFAULT_OLLAMA_URL}/api/version`, undefined, 2000);
+    const res = await fetchJson<{ version: string }>(`${toContainerUrl(DEFAULT_OLLAMA_URL)}/api/version`, undefined, 2000);
     ollama = { found: true, url: DEFAULT_OLLAMA_URL, version: res.version };
   } catch {
     // 없음
   }
 
-  const ports: Record<string, boolean> = {};
-  for (const port of [4000, 4001, 5433, 11434]) ports[port] = await portFree(port);
+  // bridge 방식에서는 어드민이 호스트 포트를 직접 볼 수 없다 (null = 확인 불가, 설치할 때 Docker 가 알려 준다).
+  const ports: Record<string, boolean | null> = {};
+  for (const port of [4000, 4001, 5433, 11434]) ports[port] = isBridge() ? null : await portFree(port);
 
-  return { docker, ollama, ports, appImage: APP_IMAGE, pending: Boolean(readInstallConfig()) };
+  return { docker, ollama, ports, networkMode: NETWORK_MODE, appImage: APP_IMAGE, pending: Boolean(readInstallConfig()) };
 }
 
 export async function testDatabaseUrl(url: string) {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 5000 });
+  const client = new Client({ connectionString: toContainerUrl(url), connectionTimeoutMillis: 5000 });
   try {
     await client.connect();
     const version = (await client.query("SHOW server_version")).rows[0]?.server_version as string;
@@ -141,7 +168,8 @@ export async function testDatabaseUrl(url: string) {
   }
 }
 
-export async function testOllamaUrl(url: string) {
+export async function testOllamaUrl(rawUrl: string) {
+  const url = toContainerUrl(rawUrl);
   try {
     const version = await fetchJson<{ version: string }>(`${url.replace(/\/+$/, "")}/api/version`);
     const chat = await listModels({ provider: "ollama", baseUrl: url }, "chat");
@@ -257,11 +285,21 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
     postgresPassword: pending?.secrets.postgresPassword || randomBytes(24).toString("hex"),
     settingsKey: pending?.secrets.settingsKey || randomBytes(32).toString("hex"),
   };
+  // 아래 주소들은 "어드민·서비스 컨테이너에서 닿는 주소"다.
+  // host 방식은 서버의 127.0.0.1 그대로, bridge 방식은 Docker 네트워크 안의 컨테이너 이름이나 host.docker.internal.
   const databaseUrl =
     plan.database.mode === "docker"
-      ? `postgresql://noty:${secrets.postgresPassword}@127.0.0.1:${plan.database.port}/noty`
-      : plan.database.url;
-  const ollamaUrl = plan.ollama.mode === "external" ? plan.ollama.url.replace(/\/+$/, "") : DEFAULT_OLLAMA_URL;
+      ? isBridge()
+        ? `postgresql://noty:${secrets.postgresPassword}@${NAMES.db}:5432/noty`
+        : `postgresql://noty:${secrets.postgresPassword}@127.0.0.1:${plan.database.port}/noty`
+      : toContainerUrl(plan.database.url);
+  const ollamaUrl =
+    plan.ollama.mode === "external"
+      ? toContainerUrl(plan.ollama.url.replace(/\/+$/, ""))
+      : plan.ollama.mode === "docker" && isBridge()
+        ? `http://${NAMES.ollama}:11434`
+        : DEFAULT_OLLAMA_URL;
+  const usesDocker = plan.database.mode === "docker" || plan.ollama.mode === "docker" || plan.services.mode === "docker";
   const config: NotyInstallConfig = {
     version: 1,
     database: { mode: plan.database.mode, url: databaseUrl, port: plan.database.mode === "docker" ? plan.database.port : undefined },
@@ -276,6 +314,11 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
   writeInstallConfig(config);
 
   try {
+    if (isBridge() && usesDocker) {
+      await ensureNetwork(DOCKER_NETWORK);
+      log(`Docker 네트워크 '${DOCKER_NETWORK}' 를 씁니다 (Docker Desktop 방식).`);
+    }
+
     /* 1. 데이터베이스 */
     await step("database", async () => {
       if (plan.database.mode === "docker") {
@@ -286,10 +329,13 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
         }
         await ensureVolume(VOLUMES.db);
         await replaceManagedContainer(NAMES.db, log);
-        if (!(await portFree(plan.database.port))) throw new Error(`127.0.0.1:${plan.database.port} 포트를 이미 다른 프로그램이 쓰고 있습니다.`);
+        if (!isBridge() && !(await portFree(plan.database.port))) {
+          throw new Error(`127.0.0.1:${plan.database.port} 포트를 이미 다른 프로그램이 쓰고 있습니다.`);
+        }
         await runContainer({
           name: NAMES.db,
           image: POSTGRES_IMAGE,
+          network: isBridge() ? DOCKER_NETWORK : undefined,
           env: { POSTGRES_USER: "noty", POSTGRES_PASSWORD: secrets.postgresPassword, POSTGRES_DB: "noty" },
           publish: [{ containerPort: 5432, hostPort: plan.database.port }],
           volumes: [{ volume: VOLUMES.db, target: "/var/lib/postgresql/data" }],
@@ -312,7 +358,9 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
       "ollama",
       async () => {
         if (plan.ollama.mode === "docker") {
-          if (!(await portFree(11434))) throw new Error("11434 포트에 이미 Ollama(또는 다른 프로그램)가 있습니다. 'URL 로 연결'을 고르세요.");
+          if (!isBridge() && !(await portFree(11434))) {
+            throw new Error("11434 포트에 이미 Ollama(또는 다른 프로그램)가 있습니다. 'URL 로 연결'을 고르세요.");
+          }
           if (!(await imageExists(OLLAMA_IMAGE))) {
             log(`Ollama 이미지(${OLLAMA_IMAGE})를 받습니다.`);
             await pullImage(OLLAMA_IMAGE, log);
@@ -322,9 +370,11 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
           await runContainer({
             name: NAMES.ollama,
             image: OLLAMA_IMAGE,
-            hostNetwork: true,
-            // 공식 이미지는 0.0.0.0 에 열리므로 loopback 으로 묶는다.
-            env: { OLLAMA_HOST: "127.0.0.1:11434", OLLAMA_KEEP_ALIVE: "30m" },
+            // host 방식: 서버 loopback 에만 연다. bridge 방식: 컨테이너 안에서는 모두에게 열고, 호스트에는 127.0.0.1 로만 공개한다.
+            hostNetwork: !isBridge(),
+            network: isBridge() ? DOCKER_NETWORK : undefined,
+            publish: isBridge() ? [{ containerPort: 11434, hostPort: 11434 }] : undefined,
+            env: { OLLAMA_HOST: isBridge() ? "0.0.0.0:11434" : "127.0.0.1:11434", OLLAMA_KEEP_ALIVE: "30m" },
             volumes: [{ volume: VOLUMES.ollama, target: "/root/.ollama" }],
             gpu: plan.ollama.gpu,
           });
@@ -372,29 +422,50 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
     const appUrl = plan.services.publicUrl || `http://${plan.services.bind === "network" ? "<서버 주소>" : "127.0.0.1"}:${plan.services.apiPort}`;
     current.appUrl = appUrl;
     await step("services", async () => {
-      const healthUrl = `http://127.0.0.1:${plan.services.apiPort}/api/health`;
+      const healthUrl = isBridge()
+        ? plan.services.mode === "docker"
+          ? `http://${NAMES.api}:${plan.services.apiPort}/api/health`
+          : `http://host.docker.internal:${plan.services.apiPort}/api/health`
+        : `http://127.0.0.1:${plan.services.apiPort}/api/health`;
       if (plan.services.mode === "docker") {
         if (!(await imageExists(APP_IMAGE))) throw new Error(`앱 이미지(${APP_IMAGE})가 없습니다. 어드민을 띄운 이미지와 같은 이름이어야 합니다.`);
         await ensureVolume(VOLUMES.data);
         await replaceManagedContainer(NAMES.api, log);
         await replaceManagedContainer(NAMES.collab, log);
-        for (const port of [plan.services.apiPort, plan.services.collabPort]) {
-          if (!(await portFree(port))) throw new Error(`127.0.0.1:${port} 포트를 이미 다른 프로그램이 쓰고 있습니다.`);
+        if (!isBridge()) {
+          for (const port of [plan.services.apiPort, plan.services.collabPort]) {
+            if (!(await portFree(port))) throw new Error(`127.0.0.1:${port} 포트를 이미 다른 프로그램이 쓰고 있습니다.`);
+          }
         }
         await runContainer({
           name: NAMES.api,
           image: APP_IMAGE,
           cmd: ["npx", "tsx", "apps/server/index.ts"],
-          hostNetwork: true,
-          env: { ...serviceEnv, HOST: host, PORT: String(plan.services.apiPort) },
+          hostNetwork: !isBridge(),
+          network: isBridge() ? DOCKER_NETWORK : undefined,
+          // bridge: 컨테이너 안에서는 0.0.0.0, 호스트에는 고른 범위(127.0.0.1 또는 0.0.0.0)로 공개
+          publish: isBridge() ? [{ containerPort: plan.services.apiPort, hostPort: plan.services.apiPort, hostIp: host }] : undefined,
+          env: {
+            ...serviceEnv,
+            HOST: isBridge() ? "0.0.0.0" : host,
+            PORT: String(plan.services.apiPort),
+            ...(isBridge() ? { COLLAB_UPSTREAM_HOST: NAMES.collab } : {}),
+          },
           volumes: [{ volume: VOLUMES.data, target: "/app/server-data" }],
         });
         await runContainer({
           name: NAMES.collab,
           image: APP_IMAGE,
           cmd: ["npx", "tsx", "apps/server/collaboration.ts"],
-          hostNetwork: true,
-          env: { ...serviceEnv, COLLAB_MODE: "single", COLLAB_HOST: "127.0.0.1", COLLAB_INSTANCE_NAME: "noty-collab" },
+          hostNetwork: !isBridge(),
+          network: isBridge() ? DOCKER_NETWORK : undefined,
+          env: {
+            ...serviceEnv,
+            COLLAB_MODE: "single",
+            // 협업 서버는 api 만 접속한다 (host: loopback, bridge: Docker 네트워크 안).
+            COLLAB_HOST: isBridge() ? "0.0.0.0" : "127.0.0.1",
+            COLLAB_INSTANCE_NAME: "noty-collab",
+          },
         });
         log("api·collab 컨테이너를 시작했습니다. 첫 시작에서 DB 스키마를 만듭니다…");
         await waitFor(async () => (await fetch(healthUrl, { signal: AbortSignal.timeout(2000) })).ok, 180_000, "API 서버가 시간 안에 뜨지 않았습니다.", async () =>
@@ -403,7 +474,7 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
         return appUrl;
       }
       current.manualEnv = [
-        ...Object.entries({ ...serviceEnv, HOST: host, PORT: String(plan.services.apiPort), NOTY_WEB_DIST: "/app/dist" }).map(([k, v]) => `${k}=${v}`),
+        ...Object.entries({ ...serviceEnv, HOST: host, PORT: String(plan.services.apiPort), NOTY_WEB_DIST: "/app/apps/web/dist" }).map(([k, v]) => `${k}=${v}`),
         `# 협업 서버: COLLAB_HOST=127.0.0.1 COLLAB_PORT=${plan.services.collabPort} COLLAB_MODE=single`,
       ].join("\n");
       log(`아래 환경변수로 api·collab 을 실행해 주세요. ${healthUrl} 가 응답할 때까지 기다립니다 (최대 30분).`);

@@ -216,7 +216,9 @@ export type ContainerSpec = {
   cmd?: string[];
   env?: Record<string, string>;
   hostNetwork?: boolean;
-  /** 컨테이너 포트 → 127.0.0.1:호스트 포트 (bridge 네트워크일 때) */
+  /** host 네트워크가 아닐 때 붙을 Docker 네트워크 이름 (같은 네트워크의 컨테이너끼리 이름으로 찾는다) */
+  network?: string;
+  /** 컨테이너 포트 → 호스트 포트 (기본 127.0.0.1, host 네트워크가 아닐 때) */
   publish?: { containerPort: number; hostPort: number; hostIp?: string }[];
   volumes?: { volume: string; target: string }[];
   gpu?: boolean;
@@ -236,8 +238,10 @@ export async function runContainer(spec: ContainerSpec): Promise<void> {
     Labels: { [MANAGED_LABEL]: "true" },
     ExposedPorts: spec.hostNetwork ? undefined : exposed,
     HostConfig: {
-      NetworkMode: spec.hostNetwork ? "host" : "bridge",
+      NetworkMode: spec.hostNetwork ? "host" : spec.network || "bridge",
       PortBindings: spec.hostNetwork ? undefined : bindings,
+      // Linux 의 bridge 에서도 host.docker.internal 로 호스트에 닿게 한다 (Docker Desktop 은 원래 된다).
+      ExtraHosts: spec.hostNetwork ? undefined : ["host.docker.internal:host-gateway"],
       RestartPolicy: { Name: "unless-stopped" },
       Mounts: (spec.volumes || []).map((v) => ({ Type: "volume", Source: v.volume, Target: v.target })),
       DeviceRequests: spec.gpu ? [{ Driver: "nvidia", Count: -1, Capabilities: [["gpu"]] }] : undefined,
@@ -246,6 +250,12 @@ export async function runContainer(spec: ContainerSpec): Promise<void> {
   await json(`/containers/create?name=${encodeURIComponent(spec.name)}`, { method: "POST", body });
   const { status, body: startBody } = await request(`/containers/${encodeURIComponent(spec.name)}/start`, { method: "POST" });
   if (status >= 400) throw new DockerError(startBody.toString("utf8"), status);
+}
+
+export async function ensureNetwork(name: string): Promise<void> {
+  const { status } = await request(`/networks/${encodeURIComponent(name)}`);
+  if (status === 200) return;
+  await json("/networks/create", { method: "POST", body: { Name: name, Labels: { [MANAGED_LABEL]: "true" } } });
 }
 
 export async function containerLogs(name: string, tail = 30): Promise<string> {
