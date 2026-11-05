@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Noty 데스크톱 앱 (Electron). 빌드된 웹 화면을 불러와 Noty 서버에 접속한다.",
+  "license": "GPL-3.0-only",
   "main": "main.cjs",
   "author": "Noty",
   "devDependencies": {
@@ -16,6 +17,7 @@
       "main.cjs",
       "preload.cjs",
       "csp.cjs",
+      "LICENSE",
       "renderer/**/*",
       "!node_modules/**/*"
     ],
@@ -38,6 +40,7 @@
         "deb"
       ],
       "category": "Office"
-    }
+    },
+    "copyright": "Copyright © Noty contributors · GPL-3.0"
   }
 }

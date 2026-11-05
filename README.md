@@ -99,3 +99,9 @@ npm run dist                 # release/ 에 dmg · 설치 파일 · AppImage
 | `NOTY_DATA_DIR` | `server-data/` | 첨부 파일 등 데이터 폴더 |
 | `ADMIN_HOST` / `ADMIN_PORT` | `127.0.0.1` / `4010` | 어드민 주소 |
 | `REDIS_URL` | 없음 | 협업 서버 여러 대 운영 시 |
+
+## 라이선스
+
+[GPL-3.0](./LICENSE). 다단 레이아웃(`@blocknote/xl-multi-column`)이 GPL-3.0 이라 전체를 GPL-3.0 으로 배포합니다.
+배포물(데스크톱 앱, 서버 이미지)을 남에게 줄 때는 소스 코드도 함께 제공해야 합니다(저장소 주소 안내로 충분).
+포함된 오픈소스 목록과 라이선스는 배포물 안의 `THIRD_PARTY_NOTICES.txt` 에 있습니다.

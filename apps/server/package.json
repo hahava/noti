@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Noty 메인 API(웹 화면 제공 포함)와 실시간 협업 서버",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "@hocuspocus/extension-database": "^4.7.1",
     "@hocuspocus/extension-redis": "^4.7.1",

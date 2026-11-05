@@ -40,8 +40,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 export const APP_IMAGE = process.env.NOTY_APP_IMAGE || "noty-app:latest";
 const POSTGRES_IMAGE = "noty-postgres:pg17-pgroonga";
 const OLLAMA_IMAGE = "ollama/ollama:0.40.0";
-const NAMES = { db: "noty-db", ollama: "noty-ollama", api: "noty-api", collab: "noty-collab" };
-const VOLUMES = { db: "noty_pgdata", ollama: "noty_ollama", data: "noty_data" };
+// 컨테이너·볼륨·네트워크 이름 앞부분. 검사 스크립트처럼 실제 설치와 겹치면 안 될 때 NOTY_RESOURCE_PREFIX 로 바꾼다.
+const PREFIX = (process.env.NOTY_RESOURCE_PREFIX || "noty").replace(/[^a-z0-9]/g, "") || "noty";
+const NAMES = { db: `${PREFIX}-db`, ollama: `${PREFIX}-ollama`, api: `${PREFIX}-api`, collab: `${PREFIX}-collab` };
+const VOLUMES = { db: `${PREFIX}_pgdata`, ollama: `${PREFIX}_ollama`, data: `${PREFIX}_data` };
 const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
 
 /**
@@ -51,7 +53,7 @@ const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
  *           필요한 포트만 호스트에 연다. 사용자가 적은 127.0.0.1(호스트 컴퓨터)은 host.docker.internal 로 바꿔 접속한다.
  */
 export const NETWORK_MODE: "host" | "bridge" = process.env.NOTY_DOCKER_NETWORK === "bridge" ? "bridge" : "host";
-const DOCKER_NETWORK = "noty";
+const DOCKER_NETWORK = PREFIX;
 const isBridge = () => NETWORK_MODE === "bridge";
 
 /** 사용자가 적은 주소(호스트 컴퓨터 기준)를 어드민·서비스 컨테이너에서 닿는 주소로 바꾼다. */

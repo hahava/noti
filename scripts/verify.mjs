@@ -427,7 +427,8 @@ app.whenReady().then(async () => {
 async function dockerChecks() {
   console.log("\n[Docker 검사] (운영 이미지 + 설치 마법사 전체 설치, 격리된 이름·볼륨)");
   const existing = spawnSync("docker", ["ps", "-a", "--format", "{{.Names}}"], { encoding: "utf8" }).stdout.split("\n");
-  const clash = ["noty-admin", "noty-api", "noty-collab", "noty-db"].filter((n) => existing.includes(n));
+  // 실제 설치(noty-*)와 겹치지 않게 검사용 이름(notyverify-*)을 쓴다.
+  const clash = ["notyverify-admin", "notyverify-api", "notyverify-collab", "notyverify-db"].filter((n) => existing.includes(n));
   if (clash.length) {
     record("Docker 검사", false, `이미 있는 컨테이너와 이름이 겹쳐 건너뜁니다: ${clash.join(", ")}`);
     return;
@@ -447,36 +448,36 @@ async function dockerChecks() {
   const dir = mkdtempSync(path.join(os.tmpdir(), "noty-verify-docker-"));
   writeFileSync(
     path.join(dir, "drive.mjs"),
-    `const A = "http://127.0.0.1:4410";
+    `const A = "http://127.0.0.1:4430";
 const code = process.argv[2];
 const call = async (p, o = {}) => { const r = await fetch(A + p, { method: o.method || "GET", headers: { "Content-Type": "application/json", "X-Setup-Code": code }, body: o.body && JSON.stringify(o.body) }); return { status: r.status, data: await r.json().catch(() => ({})) }; };
 const out = {};
 out.verify = (await call("/api/setup/verify", { method: "POST" })).status;
-const plan = { database: { mode: "docker", port: 15499 }, ollama: { mode: "none" }, models: { chat: "", embedding: "", pull: false },
-  services: { mode: "docker", bind: "local", apiPort: 4400, collabPort: 4401 }, admin: { username: "boss", password: "boss-pass-123" } };
+const plan = { database: { mode: "docker", port: 15498 }, ollama: { mode: "none" }, models: { chat: "", embedding: "", pull: false },
+  services: { mode: "docker", bind: "local", apiPort: 4420, collabPort: 4421 }, admin: { username: "boss", password: "boss-pass-123" } };
 out.install = (await call("/api/setup/install", { method: "POST", body: plan })).status;
 let job; for (let i = 0; i < 120; i++) { await new Promise((r) => setTimeout(r, 3000)); job = (await call("/api/setup/job")).data.job; if (job.status !== "running") break; }
 out.job = job.status; out.error = job.error;
 out.locked = (await call("/api/setup/install", { method: "POST", body: plan })).status;
-const login = await (await fetch("http://127.0.0.1:4400/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "boss", password: "boss-pass-123" }) })).json();
+const login = await (await fetch("http://127.0.0.1:4420/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "boss", password: "boss-pass-123" }) })).json();
 out.mainLogin = Boolean(login.token);
-out.web = (await fetch("http://127.0.0.1:4400/")).status;
-out.ws = await new Promise((res) => { const s = new WebSocket("ws://127.0.0.1:4400/collab"); s.onopen = () => { s.close(); res("open"); }; s.onerror = () => res("error"); setTimeout(() => res("timeout"), 4000); });
+out.web = (await fetch("http://127.0.0.1:4420/")).status;
+out.ws = await new Promise((res) => { const s = new WebSocket("ws://127.0.0.1:4420/collab"); s.onopen = () => { s.close(); res("open"); }; s.onerror = () => res("error"); setTimeout(() => res("timeout"), 4000); });
 console.log("VERIFY_DOCKER=" + JSON.stringify(out));`,
   );
   const sh = (a) => spawnSync("docker", a, { encoding: "utf8" });
   try {
-    sh(["volume", "create", "noty_config"]);
+    sh(["volume", "create", "notyverify_config"]);
     sh([
-      "run", "-d", "--name", "noty-admin", "--network", "host", "-u", "root",
-      "-v", "/var/run/docker.sock:/var/run/docker.sock", "-v", "noty_config:/app/config",
-      "-e", "ADMIN_HOST=127.0.0.1", "-e", "ADMIN_PORT=4410", "-e", "NOTY_APP_IMAGE=noty-app:verify",
+      "run", "-d", "--name", "notyverify-admin", "--network", "host", "-u", "root",
+      "-v", "/var/run/docker.sock:/var/run/docker.sock", "-v", "notyverify_config:/app/config",
+      "-e", "ADMIN_HOST=127.0.0.1", "-e", "ADMIN_PORT=4430", "-e", "NOTY_APP_IMAGE=noty-app:verify", "-e", "NOTY_RESOURCE_PREFIX=notyverify",
       "noty-app:verify",
     ]);
     let code = "";
     for (let i = 0; i < 30 && !code; i++) {
       await new Promise((r) => setTimeout(r, 1000));
-      code = sh(["logs", "noty-admin"]).stdout.match(/설치 코드: ([A-Z0-9-]+)/)?.[1] || "";
+      code = sh(["logs", "notyverify-admin"]).stdout.match(/설치 코드: ([A-Z0-9-]+)/)?.[1] || "";
     }
     if (!code) throw new Error("설치 코드를 찾지 못했습니다.");
     const drive = sh(["run", "--rm", "--network", "host", "-v", `${dir}:/e2e`, "noty-app:verify", "node", "/e2e/drive.mjs", code]);
@@ -488,8 +489,8 @@ console.log("VERIFY_DOCKER=" + JSON.stringify(out));`,
   } catch (error) {
     record("설치 마법사", false, error instanceof Error ? error.message : String(error));
   } finally {
-    sh(["rm", "-f", "noty-admin", "noty-api", "noty-collab", "noty-db"]);
-    sh(["volume", "rm", "noty_config", "noty_pgdata", "noty_data"]);
+    sh(["rm", "-f", "notyverify-admin", "notyverify-api", "notyverify-collab", "notyverify-db"]);
+    sh(["volume", "rm", "notyverify_config", "notyverify_pgdata", "notyverify_data"]);
     sh(["rmi", "noty-app:verify"]);
     rmSync(dir, { recursive: true, force: true });
   }

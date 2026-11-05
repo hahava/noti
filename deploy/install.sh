@@ -60,9 +60,19 @@ for _ in $(seq 1 30); do
   if docker logs noty-admin 2>&1 | grep -q "설치 코드\|공유 DB"; then break; fi
   sleep 1
 done
-docker logs noty-admin 2>&1 | grep -E "설치 코드|Admin\]" || true
-cat <<MSG
+CODE="$(docker logs noty-admin 2>&1 | grep -oE "설치 코드: [A-Z0-9-]+" | awk '{print $3}' | tail -1)"
+if [[ -n "$CODE" ]]; then
+  cat <<MSG
 
-브라우저로 http://127.0.0.1:$PORT 를 열고 설치 코드를 입력하세요.
-다른 컴퓨터에서 열려면: ssh -L $PORT:127.0.0.1:$PORT <이 서버>
+설치 코드: $CODE
+브라우저로 아래 링크를 열면 바로 설치 마법사가 시작됩니다:
+
+  http://127.0.0.1:$PORT/?code=$CODE
+
+다른 컴퓨터에서 열려면 먼저: ssh -L $PORT:127.0.0.1:$PORT <이 서버>
 MSG
+else
+  docker logs noty-admin 2>&1 | grep -E "Admin\]" || true
+  echo
+  echo "이미 설치된 상태입니다. 브라우저로 http://127.0.0.1:$PORT 에서 관리자 계정으로 로그인하세요."
+fi

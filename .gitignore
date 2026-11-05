@@ -15,3 +15,4 @@ apps/desktop/renderer/
 
 # 배포 때 만드는 라이선스 고지
 THIRD_PARTY_NOTICES.txt
+apps/desktop/LICENSE

@@ -134,6 +134,30 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [job?.log.length]);
 
+  const verifyCode = (value: string) =>
+    run(async () => {
+      setSetupCode(value);
+      await setupApi.verify();
+      applyEnvironment(await setupApi.environment());
+      next();
+    });
+
+  // install.sh 가 알려 주는 링크(…/?code=XXXX-XXXX)로 열었으면 코드를 바로 확인한다.
+  // 코드는 주소창·방문 기록에 남지 않게 바로 지운다.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromLink = params.get("code");
+    if (!fromLink) return;
+    params.delete("code");
+    const rest = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+    if (step !== "code") return;
+    setCode(fromLink);
+    void verifyCode(fromLink);
+    // 처음 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const plan = (): SetupPlan => ({
     database: dbMode === "docker" ? { mode: "docker", port: dbPort } : { mode: "external", url: dbUrl.trim() },
     ollama: ollamaMode === "docker" ? { mode: "docker", gpu } : ollamaMode === "external" ? { mode: "external", url: ollamaUrl.trim() } : { mode: "none" },
@@ -150,12 +174,7 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
   if (step === "code") {
     const submit = (event: FormEvent) => {
       event.preventDefault();
-      void run(async () => {
-        setSetupCode(code);
-        await setupApi.verify();
-        applyEnvironment(await setupApi.environment());
-        next();
-      });
+      void verifyCode(code);
     };
     body = (
       <form id="setup-code-form" onSubmit={submit} className="stack">
