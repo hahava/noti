@@ -17,7 +17,8 @@ RUN npm ci
 
 FROM deps AS build
 COPY . .
-RUN npx tsc -b && npm run build:web && npm run build:admin
+RUN npx tsc -b && npm run build:web && npm run build:admin \
+    && node scripts/generate-notices.mjs THIRD_PARTY_NOTICES.txt @noty/server @noty/admin @noty/web
 
 FROM node:22.22.2-bookworm-slim AS app
 WORKDIR /app
@@ -37,6 +38,7 @@ RUN npm ci --omit=dev --workspace @noty/server --workspace @noty/admin && npm ca
 COPY . .
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/admin/web/dist ./apps/admin/web/dist
+COPY --from=build /app/THIRD_PARTY_NOTICES.txt ./THIRD_PARTY_NOTICES.txt
 RUN mkdir -p /app/server-data/uploads /app/config && chown -R node:node /app/server-data /app/config
 USER node
 EXPOSE 4000 4001 4010

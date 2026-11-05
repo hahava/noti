@@ -442,6 +442,8 @@ async function dockerChecks() {
     return pass ? `pass ${pass}` : "";
   });
 
+  run("운영 이미지: 라이선스 고지 포함", "docker", ["run", "--rm", "noty-app:verify", "sh", "-c", "test -s THIRD_PARTY_NOTICES.txt && grep -c '^License:' THIRD_PARTY_NOTICES.txt"], (out) => `패키지 ${out.trim()}개`);
+
   const dir = mkdtempSync(path.join(os.tmpdir(), "noty-verify-docker-"));
   writeFileSync(
     path.join(dir, "drive.mjs"),

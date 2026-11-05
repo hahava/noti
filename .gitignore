@@ -12,3 +12,6 @@ deploy/backups/
 
 # Electron 패키징 때 복사되는 웹 빌드
 apps/desktop/renderer/
+
+# 배포 때 만드는 라이선스 고지
+THIRD_PARTY_NOTICES.txt

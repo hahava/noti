@@ -29,7 +29,7 @@
     "start": "npm run build && electron apps/desktop",
     "smoke": "npm run build && electron apps/desktop --smoke-test",
     "dist": "npm run build && npm run package:desktop",
-    "package:desktop": "node -e \"const fs=require('fs');fs.rmSync('apps/desktop/renderer',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/desktop/renderer',{recursive:true})\" && electron-builder --projectDir apps/desktop",
+    "package:desktop": "node -e \"const fs=require('fs');fs.rmSync('apps/desktop/renderer',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/desktop/renderer',{recursive:true})\" && node scripts/generate-notices.mjs apps/desktop/renderer/THIRD_PARTY_NOTICES.txt @noty/web && electron-builder --projectDir apps/desktop",
     "dev:admin": "npm run dev -w @noty/admin",
     "build:admin": "npm run build -w @noty/admin",
     "start:admin": "npm run start -w @noty/admin",
