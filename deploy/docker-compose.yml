@@ -14,6 +14,8 @@ x-app-env: &app-env
   DATABASE_URL: postgresql://noty:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 넣어 주세요}@127.0.0.1:${NOTY_DB_PORT:-5433}/noty
   NODE_ENV: production
   FILE_URL_SECRET: ${FILE_URL_SECRET:?FILE_URL_SECRET 를 .env 에 넣어 주세요}
+  # DB 에 저장하는 AI API 키 등을 암호화하는 키 (api·admin 이 같은 값을 써야 한다)
+  NOTY_SECRET_KEY: ${NOTY_SECRET_KEY:?NOTY_SECRET_KEY 를 .env 에 넣어 주세요}
   NOTY_ADMIN_PASSWORD: ${NOTY_ADMIN_PASSWORD:-}
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
   # 첫 시작 때의 AI 기본값. 이후에는 어드민에서 바꾼 값(DB)이 우선한다.

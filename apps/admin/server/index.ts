@@ -16,6 +16,7 @@ import {
   getSystemSettingsFromDb,
   resolveMaskedAIKey,
   resolveMaskedKeyFor,
+  encryptStoredSecrets,
   saveSystemSettingsToDb,
   testAIConnection,
   testDatabaseConnection,
@@ -416,6 +417,7 @@ async function bootstrap() {
     initSetupMode();
   } else {
     await ensureUserColumns();
+    await encryptStoredSecrets();
   }
   server.listen(PORT, HOST, () => {
     console.log(`[Admin] http://${HOST}:${PORT} ${setupRequired() ? "(설치 모드)" : "(공유 DB: @noty/core)"}`);

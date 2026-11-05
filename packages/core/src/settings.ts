@@ -4,6 +4,7 @@ import Redis from "ioredis";
 import pg from "pg";
 import { DATABASE_URL, pool } from "./db.js";
 import { DEFAULT_UPLOADS_DIR } from "./paths.js";
+import { isSealed, mapSettingSecrets, openSecret, sealSecret } from "./secret-box.js";
 
 const { Pool } = pg;
 
@@ -228,7 +229,8 @@ export async function getSystemSettingsFromDb(maskSecrets = true): Promise<Syste
     const map = new Map<string, { value: any; updatedAt: string; updatedBy?: string }>();
     for (const row of res.rows) {
       map.set(String(row.key), {
-        value: row.value,
+        // 비밀값은 암호화되어 저장된다 (secret-box). 읽을 때 푼다.
+        value: mapSettingSecrets(String(row.key), row.value, openSecret),
         updatedAt: new Date(row.updated_at).toISOString(),
         updatedBy: row.updated_by ? String(row.updated_by) : undefined,
       });
@@ -355,11 +357,36 @@ export async function saveSystemSettingsToDb(
          SET value = EXCLUDED.value,
              updated_at = EXCLUDED.updated_at,
              updated_by = EXCLUDED.updated_by`,
-      [key, JSON.stringify(val), now, userId],
+      [key, JSON.stringify(mapSettingSecrets(key, val, sealSecret)), now, userId],
     );
   }
 
   return getSystemSettingsFromDb(true);
+}
+
+/**
+ * 예전에 평문으로 저장된 비밀값을 암호화해 다시 저장한다. 서버·어드민 시작 때 한 번 부른다 (이미 암호화된 값은 건드리지 않음).
+ * 반환값: 암호화한 설정 줄 수
+ */
+export async function encryptStoredSecrets(): Promise<number> {
+  const res = await pool.query<{ key: string; value: any }>(
+    "SELECT key, value FROM system_settings WHERE key IN ('ai', 'aiBackground', 'embedding', 'database')",
+  );
+  let updated = 0;
+  for (const row of res.rows) {
+    let hasPlain = false;
+    mapSettingSecrets(row.key, row.value, (secret) => {
+      if (secret && !isSealed(secret)) hasPlain = true;
+      return secret;
+    });
+    if (!hasPlain) continue;
+    await pool.query("UPDATE system_settings SET value = $2 WHERE key = $1", [
+      row.key,
+      JSON.stringify(mapSettingSecrets(row.key, row.value, sealSecret)),
+    ]);
+    updated += 1;
+  }
+  return updated;
 }
 
 export async function getEffectiveUploadsDir(): Promise<string> {

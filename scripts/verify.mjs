@@ -181,6 +181,7 @@ async function runtimeChecks() {
     ADMIN_PORT: String(PORTS.admin),
     NOTY_ADMIN_PASSWORD: ADMIN_PASSWORD,
     FILE_URL_SECRET: randomBytes(16).toString("hex"),
+    NOTY_SECRET_KEY: randomBytes(16).toString("hex"),
     NOTY_WEB_DIST: LAYOUT.webDist,
     NOTY_UPLOADS_DIR: mkdtempSync(path.join(os.tmpdir(), "noty-verify-uploads-")),
     EMBEDDING_ENABLED: "false",
@@ -288,6 +289,22 @@ async function runtimeChecks() {
     expect(list.status === 200, `목록 ${list.status}`);
     const write = await json(`${API}/api/pages`, { method: "POST", token: login.data.token, body: { title: "x" } });
     expect(write.status === 403, `쓰기 ${write.status}`);
+  });
+
+  await check("API 키 암호화 저장 (DB 에는 암호문, 화면에는 가린 값)", async () => {
+    const key = "sk-verify-0123456789";
+    const saved = await json(`${ADMIN}/api/settings`, {
+      method: "PUT",
+      token: adminToken,
+      body: { config: { embedding: { enabled: false, provider: "openai", model: "text-embedding-3-small", baseUrl: "https://api.openai.com/v1", apiKey: key } } },
+    });
+    expect(saved.status === 200, `저장 ${saved.status}`);
+    expect(saved.data.config.embedding.apiKey === "sk-v...6789", `가린 값: ${saved.data.config.embedding.apiKey}`);
+    const client = new pg.Client({ connectionString: TEST_DB_URL });
+    await client.connect();
+    const raw = (await client.query("SELECT value->>'apiKey' AS k FROM system_settings WHERE key = 'embedding'")).rows[0]?.k;
+    await client.end();
+    expect(raw?.startsWith("enc:v1:") && !raw.includes("sk-verify"), `DB 값: ${String(raw).slice(0, 20)}`);
   });
 
   await check("어드민 설정·상태 조회", async () => {

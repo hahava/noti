@@ -8,6 +8,7 @@ import {
   deletePageInDb,
   deletePagesBatchInDb,
   ensureSchema,
+  encryptStoredSecrets,
   getEffectiveUploadsDir,
   getSystemSettingsFromDb,
   getUserBySessionToken,
@@ -605,6 +606,9 @@ async function bootstrap() {
   while (retries > 0) {
     try {
       await ensureSchema();
+      // 예전에 평문으로 저장된 API 키 등을 암호화해 둔다.
+      const sealed = await encryptStoredSecrets();
+      if (sealed) console.log(`[settings] 평문으로 저장돼 있던 비밀값 ${sealed}건을 암호화했습니다.`);
       break;
     } catch (error) {
       retries -= 1;

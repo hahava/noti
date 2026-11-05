@@ -26,7 +26,8 @@ export interface NotyInstallConfig {
     collabPort: number;
     publicUrl?: string;
   };
-  secrets: { fileUrlSecret: string; postgresPassword?: string };
+  /** settingsKey: DB 에 저장하는 API 키 등을 암호화하는 키 (secret-box) */
+  secrets: { fileUrlSecret: string; postgresPassword?: string; settingsKey?: string };
 }
 
 export const CONFIG_DIR = process.env.NOTY_CONFIG_DIR ? path.resolve(process.env.NOTY_CONFIG_DIR) : null;

@@ -255,6 +255,7 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
   const secrets = {
     fileUrlSecret: pending?.secrets.fileUrlSecret || randomBytes(32).toString("hex"),
     postgresPassword: pending?.secrets.postgresPassword || randomBytes(24).toString("hex"),
+    settingsKey: pending?.secrets.settingsKey || randomBytes(32).toString("hex"),
   };
   const databaseUrl =
     plan.database.mode === "docker"
@@ -266,7 +267,11 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
     database: { mode: plan.database.mode, url: databaseUrl, port: plan.database.mode === "docker" ? plan.database.port : undefined },
     ollama: { mode: plan.ollama.mode, url: plan.ollama.mode === "none" ? "" : ollamaUrl, gpu: plan.ollama.mode === "docker" ? plan.ollama.gpu : undefined },
     services: { ...plan.services },
-    secrets: { fileUrlSecret: secrets.fileUrlSecret, postgresPassword: plan.database.mode === "docker" ? secrets.postgresPassword : undefined },
+    secrets: {
+      fileUrlSecret: secrets.fileUrlSecret,
+      postgresPassword: plan.database.mode === "docker" ? secrets.postgresPassword : undefined,
+      settingsKey: secrets.settingsKey,
+    },
   };
   writeInstallConfig(config);
 
@@ -357,6 +362,8 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
       NODE_ENV: "production",
       DATABASE_URL: databaseUrl,
       FILE_URL_SECRET: secrets.fileUrlSecret,
+      // DB 에 저장하는 API 키를 암호화하는 키. 어드민은 설치 설정 파일에서 같은 키를 읽는다.
+      NOTY_SECRET_KEY: secrets.settingsKey,
       NOTY_DISABLE_BOOTSTRAP_ADMIN: "1",
       // 웹 화면은 같은 출처에서 열리고 Electron 은 따로 허용되므로, 접속 주소가 없으면 다른 출처는 막는다.
       CORS_ALLOWED_ORIGINS: plan.services.publicUrl?.replace(/\/+$/, "") || "same-origin",
