@@ -15,6 +15,7 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "csp.cjs",
       "renderer/**/*",
       "!node_modules/**/*"
     ],

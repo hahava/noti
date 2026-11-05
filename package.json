@@ -32,7 +32,8 @@
     "package:desktop": "node -e \"const fs=require('fs');fs.rmSync('apps/desktop/renderer',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/desktop/renderer',{recursive:true})\" && electron-builder --projectDir apps/desktop",
     "dev:admin": "npm run dev -w @noty/admin",
     "build:admin": "npm run build -w @noty/admin",
-    "start:admin": "npm run start -w @noty/admin"
+    "start:admin": "npm run start -w @noty/admin",
+    "setup:local": "npm run build:admin && NOTY_CONFIG_DIR=$PWD/server-data/setup-local ADMIN_PORT=4011 npm run start:admin"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

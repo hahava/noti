@@ -241,6 +241,19 @@ async function runtimeChecks() {
     expect(body === "hello verify", `서명 주소 내용: ${body}`);
   });
 
+  await check("특수 블록 페이지 저장 (코드·수식·다이어그램)", async () => {
+    const created = await json(`${API}/api/pages`, { method: "POST", token: mainToken, body: { title: "블록 확인" } });
+    const id = created.data.page?.id ?? created.data.id;
+    const blocks = [
+      { type: "codeBlock", props: { language: "javascript" }, content: [{ type: "text", text: "const answer = 42;", styles: {} }] },
+      { type: "mathBlock", content: [{ type: "text", text: "\\frac{a}{b} + \\sqrt{x^2}", styles: {} }] },
+      { type: "diagram", content: [{ type: "text", text: "graph TD; A-->B;", styles: {} }] },
+      { type: "paragraph", content: [{ type: "text", text: "블록 확인 문단", styles: {} }] },
+    ];
+    const saved = await json(`${API}/api/pages/${id}/document`, { method: "PUT", token: mainToken, body: { blocks } });
+    expect(saved.status === 200, `저장 ${saved.status}`);
+  });
+
   await check("검색", async () => {
     const res = await json(`${API}/api/search?q=${encodeURIComponent("검증")}`, { token: mainToken });
     expect(res.status === 200, `status ${res.status}`);
@@ -296,11 +309,19 @@ async function electronCheck() {
   const mainFile = path.join(dir, "main.cjs");
   writeFileSync(
     mainFile,
-    `const { app, BrowserWindow } = require("electron");
+    `const { app, BrowserWindow, session } = require("electron");
+// 데스크톱 앱과 같은 CSP 를 건다.
+const { applyRendererCsp } = require(${JSON.stringify(path.join(LAYOUT.desktopDir, "csp.cjs"))});
 // 실행마다 빈 프로필을 쓴다. (이전 실행의 만료된 토큰이 남아 있으면 앱이 세션을 지우면서 결과가 흔들린다)
 app.setPath("userData", ${JSON.stringify(path.join(dir, "profile"))});
 app.whenReady().then(async () => {
+  applyRendererCsp(session.defaultSession);
   const win = new BrowserWindow({ show: false });
+  const cspViolations = [];
+  win.webContents.on("console-message", (...args) => {
+    const message = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
+    if (/Content Security Policy/i.test(String(message))) cspViolations.push(String(message).slice(0, 160));
+  });
   const index = ${JSON.stringify(path.join(LAYOUT.webDist, "index.html"))};
   await win.loadFile(index);
   await win.webContents.executeJavaScript(\`
@@ -323,6 +344,26 @@ app.whenReady().then(async () => {
     login: !!document.querySelector(".login-screen"),
     error: !!document.querySelector(".center-message--error"),
   }))()\`);
+
+  // 코드·수식·다이어그램 블록 페이지를 열어 실제로 그려지는지 본다.
+  await win.webContents.executeJavaScript(\`(() => {
+    const target = [...document.querySelectorAll("button, a, [role=treeitem], [role=button], span, div")]
+      .find((el) => el.children.length === 0 && el.textContent.trim() === "블록 확인");
+    (target?.closest("button, a, [role=treeitem], [role=button]") || target)?.click();
+  })()\`);
+  let blocks = {};
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+    blocks = await win.webContents.executeJavaScript(\`({
+      opened: document.body.innerText.includes("블록 확인 문단"),
+      code: !!document.querySelector(".bn-editor pre code, .bn-editor [data-content-type=codeBlock] pre"),
+      math: !!document.querySelector(".bn-editor .katex"),
+      diagram: !!document.querySelector(".bn-editor svg[id*=mermaid], .bn-editor [data-content-type=diagram] svg"),
+    })\`);
+    if (blocks.opened && blocks.code && blocks.math && blocks.diagram) break;
+  }
+  result.blocks = blocks;
+  result.cspViolations = cspViolations;
   console.log("VERIFY_ELECTRON=" + JSON.stringify(result));
   app.exit(0);
 });`,
@@ -335,11 +376,18 @@ app.whenReady().then(async () => {
     return;
   }
   const r = JSON.parse(line.slice("VERIFY_ELECTRON=".length));
+  const { blocks, cspViolations, ...base } = r;
   record(
-    "Electron (file://) → 서버",
-    r.origin === "file://" && r.health === 200 && r.ws === "open" && r.pageListed && !r.login && !r.error,
-    JSON.stringify(r),
+    "Electron (file://, CSP) → 서버",
+    base.origin === "file://" && base.health === 200 && base.ws === "open" && base.pageListed && !base.login && !base.error,
+    JSON.stringify(base),
   );
+  record(
+    "Electron: 코드·수식·다이어그램 블록 표시",
+    Boolean(blocks?.opened && blocks.code && blocks.math && blocks.diagram),
+    JSON.stringify(blocks),
+  );
+  record("Electron: CSP 위반 없음", cspViolations.length === 0, cspViolations.length ? cspViolations.join(" | ") : "");
   // 데스크톱 앱 본체(main 프로세스)가 빌드된 화면을 찾아 띄우는지. 임시 사용자 데이터 폴더로 실행한다.
   const userData = mkdtempSync(path.join(os.tmpdir(), "noty-verify-desktop-"));
   const smoke = spawnSync("npx", ["electron", LAYOUT.desktopDir, "--smoke-test"], {

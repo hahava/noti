@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = require("electron");
 const { mkdir, readFile, rename, rm, writeFile } = require("node:fs/promises");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { existsSync } = require("node:fs");
+const { applyRendererCsp } = require("./csp.cjs");
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const devServerArgument = process.argv.find((argument) => argument.startsWith("--dev-server-url="));
@@ -378,6 +379,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  applyRendererCsp(session.defaultSession);
   protocol.handle("app-asset", (request) => {
     const url = new URL(request.url);
     if (url.hostname !== "attachments") return new Response("Not found", { status: 404 });
