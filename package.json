@@ -2,7 +2,7 @@
   "name": "noty",
   "version": "1.0.0",
   "private": true,
-  "description": "Noty: self-hosted Notion-style workspace (web, desktop, API, admin) — npm workspaces root",
+  "description": "Noty: self-hosted document workspace (web, desktop, API, admin) — npm workspaces root",
   "scripts": {
     "db:up": "docker compose up -d",
     "db:up:distributed": "docker compose --profile distributed up -d",
@@ -44,5 +44,8 @@
   "workspaces": [
     "packages/*",
     "apps/*"
-  ]
+  ],
+  "overrides": {
+    "katex": "0.18.11"
+  }
 }

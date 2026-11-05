@@ -113,7 +113,7 @@ function getUserCollaborationColor(username: string): string {
 }
 
 /* ==========================================================================
- * Notion-style Thin Stroke SVG Icons
+ * Thin stroke SVG icons
  * ========================================================================== */
 function DocSvgIcon({ hasChildren = false }: { hasChildren?: boolean }) {
   return (
@@ -4011,7 +4011,7 @@ export default function App() {
       {/* 노션 `⋯` 더보기 / 우클릭 팝오버 메뉴 */}
       {contextMenu && (
         <div
-          className="notion-popover-menu"
+          className="noty-popover-menu"
           style={{
             top: `${Math.min(window.innerHeight - 240, contextMenu.y)}px`,
             left: `${Math.min(window.innerWidth - 210, contextMenu.x)}px`,
@@ -4020,7 +4020,7 @@ export default function App() {
         >
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const targetId = contextMenu.page.id;
               setContextMenu(null);
@@ -4031,7 +4031,7 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const targetId = contextMenu.page.id;
               setContextMenu(null);
@@ -4042,7 +4042,7 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const targetId = contextMenu.page.id;
               const currentWidth = normalizePageWidthValue(
@@ -4060,10 +4060,10 @@ export default function App() {
                 : "전체 화면 너비로 전환"}
             </span>
           </button>
-          <div className="notion-menu-divider" />
+          <div className="noty-menu-divider" />
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const { page, x, y } = contextMenu;
               setContextMenu(null);
@@ -4075,14 +4075,14 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => handleStartRename(contextMenu.page)}
           >
             <span>이름 바꾸기</span>
           </button>
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const parentId = contextMenu.page.id;
               setContextMenu(null);
@@ -4094,7 +4094,7 @@ export default function App() {
           {contextMenu.page.parentId && (
             <button
               type="button"
-              className="notion-menu-item"
+              className="noty-menu-item"
               onClick={() => void handleOutdentPage(contextMenu.page)}
             >
               <span>상위 계층으로 이동</span>
@@ -4102,14 +4102,14 @@ export default function App() {
           )}
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => handleCopyPageLink(contextMenu.page)}
           >
             <span>링크 복사</span>
           </button>
           <button
             type="button"
-            className="notion-menu-item"
+            className="noty-menu-item"
             onClick={() => {
               const targetId = contextMenu.page.id;
               setContextMenu(null);
@@ -4120,11 +4120,11 @@ export default function App() {
           >
             <span>여러 페이지 선택</span>
           </button>
-          <div className="notion-menu-divider" />
+          <div className="noty-menu-divider" />
           {selectedPageIds.size > 1 && selectedPageIds.has(contextMenu.page.id) ? (
             <button
               type="button"
-              className="notion-menu-item notion-menu-item--danger"
+              className="noty-menu-item noty-menu-item--danger"
               onClick={() => void handleBulkDeletePages()}
             >
               <span>선택한 {selectedPageIds.size}개 페이지 일괄 삭제</span>
@@ -4132,7 +4132,7 @@ export default function App() {
           ) : (
             <button
               type="button"
-              className="notion-menu-item notion-menu-item--danger"
+              className="noty-menu-item noty-menu-item--danger"
               onClick={() => void handleDeletePage(contextMenu.page)}
             >
               <span>삭제</span>
@@ -4534,7 +4534,7 @@ export default function App() {
 
       <main className="workspace">
         {/* 노션 데스크톱 스타일 상단 단일 탭 바 */}
-        <div className="notion-tabbar" role="tablist" aria-label="열린 페이지 탭">
+        <div className="noty-tabbar" role="tablist" aria-label="열린 페이지 탭">
           {!isSidebarOpen && (
             <button
               type="button"
@@ -4547,7 +4547,7 @@ export default function App() {
             </button>
           )}
 
-          <div className="notion-tabbar__scroll">
+          <div className="noty-tabbar__scroll">
             {tabs.map((tab) => {
               const isHomeTab = tab.pageId === HOME_PAGE_ID;
               const pageMeta = tab.pageId && !isHomeTab ? pagesById.get(tab.pageId) : undefined;
@@ -4598,14 +4598,14 @@ export default function App() {
                     }
                   }}
                   className={[
-                    "notion-tab",
-                    isFocusedTab ? "notion-tab--active" : "",
-                    isInSplit && splitTabIds.length > 1 ? "notion-tab--in-split" : "",
+                    "noty-tab",
+                    isFocusedTab ? "noty-tab--active" : "",
+                    isInSplit && splitTabIds.length > 1 ? "noty-tab--in-split" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  <span className="notion-tab__icon">
+                  <span className="noty-tab__icon">
                     {isHomeTab ? (
                       <HomeSvgIcon />
                     ) : (
@@ -4615,17 +4615,17 @@ export default function App() {
                       />
                     )}
                   </span>
-                  <span className="notion-tab__title">{title}</span>
+                  <span className="noty-tab__title">{title}</span>
                   {isInSplit && splitTabIds.length > 1 && (
-                    <span className="notion-tab__split-badge" title={`${splitIndex + 1}번째 분할 창에 표시 중`}>
+                    <span className="noty-tab__split-badge" title={`${splitIndex + 1}번째 분할 창에 표시 중`}>
                       {splitIndex + 1}
                     </span>
                   )}
-                  <div className="notion-tab__actions">
+                  <div className="noty-tab__actions">
                     {(tabs.length > 1 || splitTabIds.length > 1) && (
                       <button
                         type="button"
-                        className={`ds-btn ds-btn--ghost ds-btn--icon notion-tab__btn ${isInSplit && splitTabIds.length > 1 ? "notion-tab__btn--active" : ""}`}
+                        className={`ds-btn ds-btn--ghost ds-btn--icon noty-tab__btn ${isInSplit && splitTabIds.length > 1 ? "noty-tab__btn--active" : ""}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           handleToggleTabInSplit(tab.id);
@@ -4643,7 +4643,7 @@ export default function App() {
                     {tabs.length > 1 && (
                       <button
                         type="button"
-                        className="ds-btn ds-btn--ghost ds-btn--icon notion-tab__btn"
+                        className="ds-btn ds-btn--ghost ds-btn--icon noty-tab__btn"
                         onClick={(event) => handleCloseTab(tab.id, event)}
                         title="탭 닫기 (⌘W)"
                         aria-label="탭 닫기"
@@ -4658,7 +4658,7 @@ export default function App() {
 
             <button
               type="button"
-              className="ds-btn ds-btn--ghost ds-btn--icon notion-tabbar__add-btn"
+              className="ds-btn ds-btn--ghost ds-btn--icon noty-tabbar__add-btn"
               onClick={() => void handleOpenInNewTab("", true)}
               title="새 탭 열기 (⌘T)"
               aria-label="새 탭 열기"

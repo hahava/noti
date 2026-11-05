@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notion}
       POSTGRES_DB: ${POSTGRES_DB:-notion_like}
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./apps/server/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
