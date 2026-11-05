@@ -1,0 +1,27 @@
+/**
+ * Responsive Overrides
+ * 좁은 화면(≤820px) 대응 규칙. 레이아웃 파일들보다 뒤에 로드되어야 합니다.
+ */
+@media (max-width: 820px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    box-shadow: var(--ds-shadow-drawer);
+  }
+  .app-shell--sidebar-closed .sidebar {
+    margin-left: 0;
+    transform: translateX(-105%);
+    box-shadow: none;
+  }
+  .file-path {
+    display: none;
+  }
+  .page {
+    padding: 2.5vh 14px 8vh;
+  }
+  .bn-editor {
+    padding-inline: 12px;
+  }
+}

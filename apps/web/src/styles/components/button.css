@@ -1,0 +1,120 @@
+/**
+ * Button Component
+ * 앱 전체 버튼의 공통 기반입니다. JSX에서는 아래 조합으로 사용합니다.
+ *   - 기본:   ds-btn + 변형(ghost / outline / primary)
+ *   - 아이콘: ds-btn ds-btn--ghost ds-btn--icon  (크기는 컴포넌트 클래스의 width/height로 조절)
+ *   - 크기:   ds-btn--sm (22px) / ds-btn--md (28px) / ds-btn--lg (36px)
+ *   - 위험:   ds-btn--danger (빨간 텍스트 + 빨간 hover)
+ *
+ * 컴포넌트 전용 클래스(.tree-action-btn 등)는 이 파일보다 뒤에 로드되므로
+ * 치수·색상 등 "차이점"만 선언하면 됩니다.
+ * hover 규칙은 :where()로 감싸 컴포넌트 쪽 :hover 재정의가 항상 이길 수 있게 합니다.
+ */
+
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: transparent;
+  color: inherit;
+  font-family: var(--ds-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--ds-transition-fast),
+    color var(--ds-transition-fast),
+    border-color var(--ds-transition-fast),
+    opacity var(--ds-transition-fast);
+}
+
+.ds-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ds-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-shadow-focus);
+}
+
+/* --------------------------------------------------------------------------
+ * Variants
+ * -------------------------------------------------------------------------- */
+
+/* Ghost: 배경 없음, hover 시 회색 배경 */
+.ds-btn--ghost {
+  color: var(--ds-text-muted);
+}
+
+.ds-btn--ghost:hover:where(:not(:disabled)) {
+  background: var(--ds-bg-hover-strong);
+  color: var(--ds-text-primary);
+}
+
+/* Outline: 얇은 테두리 + 흰 배경 (보조 액션) */
+.ds-btn--outline {
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-secondary);
+  font-weight: var(--ds-weight-medium);
+}
+
+.ds-btn--outline:hover:where(:not(:disabled)) {
+  background: var(--ds-bg-hover-strong);
+  color: var(--ds-text-primary);
+}
+
+/* Primary: 강조 파란 배경 (주요 액션) */
+.ds-btn--primary {
+  background: var(--ds-color-accent);
+  color: var(--ds-text-on-accent);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.ds-btn--primary:hover:where(:not(:disabled)) {
+  background: var(--ds-color-accent-hover);
+}
+
+/* Danger: 삭제/로그아웃 등 위험 액션 (ghost · outline과 조합) */
+.ds-btn--danger {
+  color: var(--ds-text-danger);
+}
+
+.ds-btn--danger:hover:where(:not(:disabled)) {
+  background: var(--ds-bg-danger-subtle);
+  border-color: transparent;
+  color: var(--ds-text-danger);
+}
+
+/* --------------------------------------------------------------------------
+ * Shapes & Sizes
+ * -------------------------------------------------------------------------- */
+
+.ds-btn--icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.ds-btn--sm {
+  height: 22px;
+  padding: 0 7px;
+  font-size: var(--ds-text-2xs);
+}
+
+.ds-btn--md {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--ds-text-xs);
+}
+
+.ds-btn--lg {
+  height: 36px;
+  padding: 0 12px;
+  font-size: var(--ds-text-ui);
+}

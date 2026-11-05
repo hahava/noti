@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": [
+    "apps/web/vite.config.ts",
+    "apps/server/**/*.ts",
+    "packages/core/src/**/*.ts",
+    "packages/shared/src/**/*.ts"
+  ]
+}

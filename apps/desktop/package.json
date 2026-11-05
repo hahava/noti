@@ -1,0 +1,42 @@
+{
+  "name": "@noty/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Noty 데스크톱 앱 (Electron). 빌드된 웹 화면을 불러와 Noty 서버에 접속한다.",
+  "main": "main.cjs",
+  "author": "Noty",
+  "devDependencies": {
+    "electron": "41.10.7",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "dev.kalin.noty",
+    "productName": "Noty",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**/*",
+      "!node_modules/**/*"
+    ],
+    "directories": {
+      "output": "../../release"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  }
+}

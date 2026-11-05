@@ -1,0 +1,40 @@
+services:
+  db:
+    # pgvector + PGroonga(한국어 전문 검색). 처음 한 번 `docker compose build db` 또는 `npm run db:up` 이 빌드한다.
+    build: ./docker/postgres
+    image: notion-like-postgres:pg17-pgroonga
+    container_name: notion-like-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-notion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notion}
+      POSTGRES_DB: ${POSTGRES_DB:-notion_like}
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/server/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-notion} -d ${POSTGRES_DB:-notion_like}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["distributed"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

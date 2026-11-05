@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+release
+server-data
+.git
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/backups
+*.log
+*.tsbuildinfo
+.DS_Store
+career_path_map.md

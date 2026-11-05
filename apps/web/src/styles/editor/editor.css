@@ -1,0 +1,223 @@
+/**
+ * BlockNote Editor Typography & Component Overrides
+ * 에디터 내부의 제목(H1~H6), 본문, 코드 블록, 인용구 등을 디자인 시스템 토큰(--ds-*)으로 통일합니다.
+ */
+
+.bn-container[data-color-scheme="light"] {
+  --bn-colors-editor-background: var(--ds-bg-surface);
+  --bn-colors-editor-text: var(--ds-text-primary);
+  --bn-font-family: var(--ds-font-sans);
+}
+
+.bn-editor {
+  padding-inline: 24px;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-body);
+  line-height: var(--ds-text-body-line-height);
+  color: var(--ds-text-primary);
+}
+
+/* ==========================================================================
+ * Headings (H1 ~ H6) - `vh` 기반 반응형 디자인 토큰 연동
+ * BlockNote 내부의 --level / --prev-level 변수를 디자인 시스템 토큰으로 덮어씁니다.
+ * ========================================================================== */
+.bn-editor [data-content-type="heading"] {
+  --level: var(--ds-heading-1-size);
+  padding-top: var(--ds-heading-1-space-top);
+  padding-bottom: 0.35vh;
+  line-height: var(--ds-heading-line-height);
+  letter-spacing: var(--ds-heading-letter-spacing);
+  font-weight: var(--ds-heading-weight);
+  color: var(--ds-text-strong);
+}
+
+.bn-editor [data-content-type="heading"][data-level="2"] {
+  --level: var(--ds-heading-2-size);
+  padding-top: var(--ds-heading-2-space-top);
+}
+
+.bn-editor [data-content-type="heading"][data-level="3"] {
+  --level: var(--ds-heading-3-size);
+  padding-top: var(--ds-heading-3-space-top);
+}
+
+.bn-editor [data-content-type="heading"][data-level="4"] {
+  --level: var(--ds-heading-4-size);
+  padding-top: var(--ds-heading-sub-space-top);
+}
+
+.bn-editor [data-content-type="heading"][data-level="5"] {
+  --level: var(--ds-heading-5-size);
+  padding-top: var(--ds-heading-sub-space-top);
+}
+
+.bn-editor [data-content-type="heading"][data-level="6"] {
+  --level: var(--ds-heading-6-size);
+  padding-top: var(--ds-heading-sub-space-top);
+}
+
+/* 애니메이션 전환 시 이전 레벨 크기 동기화 */
+.bn-editor [data-prev-level="1"] { --prev-level: var(--ds-heading-1-size); }
+.bn-editor [data-prev-level="2"] { --prev-level: var(--ds-heading-2-size); }
+.bn-editor [data-prev-level="3"] { --prev-level: var(--ds-heading-3-size); }
+.bn-editor [data-prev-level="4"] { --prev-level: var(--ds-heading-4-size); }
+.bn-editor [data-prev-level="5"] { --prev-level: var(--ds-heading-5-size); }
+.bn-editor [data-prev-level="6"] { --prev-level: var(--ds-heading-6-size); }
+
+/* 문서의 첫 번째 블록이 제목일 때는 상단 여백 최소화 */
+.bn-editor > .bn-block-group > .bn-block-outer:first-child [data-content-type="heading"] {
+  padding-top: 0;
+}
+
+/* ==========================================================================
+ * Blocks: Paragraph, Code, Quote, Divider, Multi-Column
+ * ========================================================================== */
+.bn-editor [data-content-type="paragraph"] {
+  padding-block: 3px;
+}
+
+.bn-editor [data-content-type="codeBlock"] {
+  border-radius: var(--ds-radius-md);
+  font-family: var(--ds-font-mono);
+}
+
+/* 노션 스타일 인라인 코드 (`코드`) 배지 */
+.bn-editor .bn-inline-content code {
+  font-family: var(--ds-font-mono);
+  font-size: 0.86em;
+  font-weight: 500;
+  color: var(--ds-text-code-inline);
+  background: rgba(var(--ds-rgb-stone), 0.15);
+  padding: 0.18em 0.42em;
+  margin: 0 0.08em;
+  border-radius: var(--ds-radius-xs);
+  word-break: break-word;
+}
+
+.bn-editor [data-content-type="quote"] blockquote {
+  border-left: 3px solid var(--ds-text-primary);
+  color: var(--ds-text-secondary);
+  padding-left: var(--ds-space-4);
+}
+
+.bn-editor [data-content-type="divider"] hr {
+  border-top: 1px solid var(--ds-border-default);
+  margin: 1.2vh 0;
+}
+
+/* ==========================================================================
+ * Notion-style Page Block (`type: "page"`)
+ * ========================================================================== */
+.bn-page-block {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-radius: var(--ds-radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-primary);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--ds-transition-fast), color var(--ds-transition-fast);
+}
+
+.bn-page-block:hover {
+  background: var(--ds-bg-hover);
+}
+
+.bn-page-block__icon {
+  font-size: 1.05em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.bn-page-block__title {
+  flex: 1;
+  font-weight: var(--ds-weight-medium);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-border-default);
+  text-underline-offset: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-page-block:hover .bn-page-block__title {
+  text-decoration-color: var(--ds-text-muted);
+}
+
+.bn-page-block__meta {
+  font-size: var(--ds-text-2xs);
+  color: var(--ds-text-subtle);
+  background: var(--ds-bg-sidebar);
+  padding: 1px 6px;
+  border-radius: var(--ds-radius-xs);
+  flex-shrink: 0;
+}
+
+.bn-page-block__arrow {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-faint);
+  opacity: 0;
+  transform: translateX(-2px);
+  transition: opacity var(--ds-transition-fast), transform var(--ds-transition-fast);
+}
+
+.bn-page-block:hover .bn-page-block__arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.bn-page-block--missing {
+  color: var(--ds-text-faint);
+  cursor: default;
+}
+
+/* ==========================================================================
+ * Dynamic Page Mention (`pageLink` Inline Content)
+ * ========================================================================== */
+.bn-page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  margin: 0 2px;
+  border-radius: var(--ds-radius-xs);
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+  font-size: 0.92em;
+  font-weight: var(--ds-weight-medium);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-border-default);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: baseline;
+  transition: background var(--ds-transition-fast), color var(--ds-transition-fast);
+}
+
+.bn-page-link:hover {
+  background: var(--ds-bg-accent-subtle);
+  color: var(--ds-text-accent);
+  text-decoration-color: var(--ds-border-accent);
+}
+
+.bn-page-link--broken {
+  background: var(--ds-bg-danger-subtle);
+  color: var(--ds-text-danger);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
+.bn-page-link__icon {
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+@media (max-width: 700px) {
+  .bn-editor {
+    padding-inline: 16px;
+  }
+}

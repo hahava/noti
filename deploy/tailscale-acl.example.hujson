@@ -1,0 +1,21 @@
+// Tailscale 관리 화면 → Access controls 에 합칠 예시.
+// 기본 정책의 "모두가 모두에게" 허용 규칙을 지워야 이 제한이 의미가 있다.
+// 서버 태그 붙이기: sudo tailscale up --advertise-tags=tag:noty-server  (또는 관리 화면에서 Edit ACL tags)
+{
+  "groups": {
+    "group:noty":       ["alice@example.com", "bob@example.com"],
+    "group:noty-admin": ["you@example.com"],
+  },
+  "tagOwners": {
+    "tag:noty-server": ["autogroup:admin"],
+  },
+  "grants": [
+    // 일반 사용자: Noty 화면(443)만
+    { "src": ["group:noty"],       "dst": ["tag:noty-server"], "ip": ["tcp:443"] },
+    // 관리자: Noty + 어드민(8443) + SSH
+    { "src": ["group:noty-admin"], "dst": ["tag:noty-server"], "ip": ["tcp:443", "tcp:8443", "tcp:22"] },
+  ],
+  "ssh": [
+    { "action": "check", "src": ["group:noty-admin"], "dst": ["tag:noty-server"], "users": ["autogroup:nonroot", "root"] },
+  ],
+}

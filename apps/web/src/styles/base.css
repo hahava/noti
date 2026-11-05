@@ -1,0 +1,25 @@
+/**
+ * Base / Global Reset
+ */
+:root {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-text-primary);
+  background: var(--ds-bg-app);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+}

@@ -1,0 +1,184 @@
+/**
+ * Login Screen
+ * 서버 호스트 입력 및 로그인 화면
+ * 모든 수치는 tokens.css의 디자인 토큰(--ds-*)을 참조합니다.
+ */
+
+/* ==========================================================================
+ * Server Host & Pre-issued Account Login Screen
+ * ========================================================================== */
+.login-screen {
+  min-height: 100vh;
+  width: 100%;
+  padding: 24px;
+  background: var(--ds-bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.login-mac-dragbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  -webkit-app-region: drag;
+}
+
+.login-card {
+  width: min(100%, 440px);
+  padding: 30px 28px;
+  border-radius: var(--ds-radius-xl);
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.login-card__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.login-card__logo {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-text-strong);
+  color: var(--ds-text-on-accent);
+  font-size: var(--ds-text-3xl);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.login-card__title {
+  margin: 0;
+  font-size: var(--ds-text-3xl);
+  font-weight: 700;
+  color: var(--ds-text-strong);
+  letter-spacing: -0.02em;
+}
+
+.login-card__subtitle {
+  margin: 4px 0 0;
+  font-size: var(--ds-text-ui);
+  color: var(--ds-text-muted);
+  line-height: 1.45;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-field__label {
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
+  color: var(--ds-text-secondary);
+}
+
+.login-host-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.login-field__input {
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-md);
+  outline: none;
+  transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast);
+}
+
+.login-field__input:focus {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+}
+
+.login-host-check-btn {
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-sidebar);
+  color: var(--ds-text-primary);
+}
+
+.login-host-check-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.login-ping-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ds-text-xs);
+  padding: 4px 8px;
+  border-radius: var(--ds-radius-sm);
+}
+
+.login-ping-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ds-radius-circle);
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.login-ping-status--checking {
+  color: var(--ds-text-muted);
+  background: var(--ds-bg-hover);
+}
+
+.login-ping-status--ok {
+  color: var(--ds-color-success);
+  background: rgba(var(--ds-rgb-green), 0.1);
+}
+
+.login-ping-status--error {
+  color: var(--ds-text-danger);
+  background: var(--ds-bg-danger-subtle);
+}
+
+.login-error-banner {
+  padding: 9px 11px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-danger-subtle);
+  color: var(--ds-text-danger);
+  font-size: var(--ds-text-ui);
+  line-height: 1.4;
+}
+
+.login-submit-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--ds-radius-sm);
+  font-size: var(--ds-text-md);
+}
+
+.login-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+

@@ -1,0 +1,48 @@
+{
+  "name": "noty",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Noty: self-hosted Notion-style workspace (web, desktop, API, admin) — npm workspaces root",
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:up:distributed": "docker compose --profile distributed up -d",
+    "db:down": "docker compose down",
+    "user:issue": "tsx apps/server/issue-user.ts",
+    "dev:server": "tsx watch apps/server/index.ts",
+    "dev:collaboration": "tsx watch apps/server/collaboration.ts",
+    "start:server": "tsx apps/server/index.ts",
+    "start:collaboration": "tsx apps/server/collaboration.ts",
+    "start:server:prd": "NODE_ENV=production tsx apps/server/index.ts",
+    "start:collaboration:prd": "NODE_ENV=production tsx apps/server/collaboration.ts",
+    "test:collaboration": "tsx --test apps/server/collaboration-store.test.ts",
+    "test": "tsx --test apps/server/*.test.ts packages/shared/src/*.test.ts",
+    "dev:web": "concurrently -k \"npm:dev:server\" \"npm:dev:collaboration\" \"vite --config apps/web/vite.config.ts --host 127.0.0.1\"",
+    "dev:web:lan": "HOST=0.0.0.0 COLLAB_HOST=0.0.0.0 VITE_DEV_HOST=0.0.0.0 concurrently -k \"npm:dev:server\" \"npm:dev:collaboration\" \"vite --config apps/web/vite.config.ts --host 0.0.0.0\"",
+    "dev:electron": "wait-on http-get://127.0.0.1:4000/api/health http://127.0.0.1:5173 && electron apps/desktop --dev-server-url=http://127.0.0.1:5173",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:collaboration\" \"vite --config apps/web/vite.config.ts --host 127.0.0.1\" \"wait-on http-get://127.0.0.1:4000/api/health http://127.0.0.1:5173 && electron apps/desktop --dev-server-url=http://127.0.0.1:5173\"",
+    "build:prd": "NODE_ENV=production npm run build",
+    "start:prd": "concurrently -k \"npm:start:server:prd\" \"npm:start:collaboration:prd\"",
+    "build": "tsc -b && npm run build:web",
+    "build:web": "vite build --config apps/web/vite.config.ts",
+    "verify": "node scripts/verify.mjs",
+    "preview": "vite preview --config apps/web/vite.config.ts",
+    "start": "npm run build && electron apps/desktop",
+    "smoke": "npm run build && electron apps/desktop --smoke-test",
+    "dist": "npm run build && npm run package:desktop",
+    "package:desktop": "node -e \"const fs=require('fs');fs.rmSync('apps/desktop/renderer',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/desktop/renderer',{recursive:true})\" && electron-builder --projectDir apps/desktop",
+    "dev:admin": "npm run dev -w @noty/admin",
+    "build:admin": "npm run build -w @noty/admin",
+    "start:admin": "npm run start -w @noty/admin"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.0",
+    "typescript": "^5.9.0",
+    "wait-on": "^9.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}

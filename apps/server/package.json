@@ -1,0 +1,21 @@
+{
+  "name": "@noty/server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Noty 메인 API(웹 화면 제공 포함)와 실시간 협업 서버",
+  "dependencies": {
+    "@hocuspocus/extension-database": "^4.7.1",
+    "@hocuspocus/extension-redis": "^4.7.1",
+    "@hocuspocus/server": "^4.7.1",
+    "@noty/core": "*",
+    "@noty/shared": "*",
+    "jszip": "3.10.2",
+    "mammoth": "1.13.0",
+    "pdfjs-dist": "6.4.299",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "unpdf": "1.9.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yjs": "^13.6.33"
+  }
+}

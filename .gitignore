@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+server-data/
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# 운영 배포 비밀값과 백업
+deploy/.env
+deploy/backups/
+
+# Electron 패키징 때 복사되는 웹 빌드
+apps/desktop/renderer/

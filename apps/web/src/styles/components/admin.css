@@ -1,0 +1,431 @@
+/**
+ * Admin Settings Modal Component
+ * 관리자 전용 시스템 설정 모달 (AI 모델, 저장소, Redis, DB, 분산 아키텍처)
+ * 모든 수치는 tokens.css의 디자인 토큰(--ds-*)을 사용합니다.
+ */
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--ds-rgb-shadow), 0.45);
+  backdrop-filter: blur(4px);
+  padding: var(--ds-space-4);
+  animation: adminFadeIn var(--ds-transition-fast) ease-out;
+  -webkit-app-region: no-drag;
+}
+
+@keyframes adminFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.admin-modal-window {
+  width: 100%;
+  max-width: 820px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg-surface);
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-modal);
+  overflow: hidden;
+  animation: adminPopIn var(--ds-transition-normal) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes adminPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 1. 헤더
+ * -------------------------------------------------------------------------- */
+.admin-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--ds-space-4) var(--ds-space-5);
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-sidebar);
+}
+
+.admin-modal-header__title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+}
+
+.admin-modal-header__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-bold);
+  letter-spacing: 0.05em;
+  background: var(--ds-bg-accent-subtle);
+  color: var(--ds-color-accent);
+  border: 1px solid var(--ds-border-accent);
+  border-radius: var(--ds-radius-pill);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.admin-modal-header__title {
+  margin: 0;
+  font-size: var(--ds-text-xl);
+  font-weight: var(--ds-weight-bold);
+  color: var(--ds-text-strong);
+}
+
+.admin-modal-header__desc {
+  margin: 3px 0 0;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+ * 2. 탭 네비게이션
+ * -------------------------------------------------------------------------- */
+.admin-modal-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-1) var(--ds-space-4);
+  background: var(--ds-bg-sidebar);
+  border-bottom: 1px solid var(--ds-border-default);
+  overflow-x: auto;
+}
+
+.admin-modal-tab {
+  height: 32px;
+  padding: 0 var(--ds-space-3);
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: var(--ds-text-secondary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ds-transition-fast), color var(--ds-transition-fast);
+}
+
+.admin-modal-tab:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+}
+
+.admin-modal-tab--active {
+  background: var(--ds-bg-surface);
+  color: var(--ds-color-accent);
+  font-weight: var(--ds-weight-semibold);
+  box-shadow: var(--ds-shadow-xs);
+}
+
+/* --------------------------------------------------------------------------
+ * 3. 모달 본문 (Scrollable)
+ * -------------------------------------------------------------------------- */
+.admin-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--ds-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+  background: var(--ds-bg-surface);
+}
+
+.admin-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+
+.admin-section-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--ds-space-2);
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+.admin-section-info h3 {
+  margin: 0;
+  font-size: var(--ds-text-base);
+  font-weight: var(--ds-weight-bold);
+  color: var(--ds-text-strong);
+}
+
+.admin-section-info p {
+  margin: 0;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+ * 4. 폼 필드
+ * -------------------------------------------------------------------------- */
+.admin-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--ds-space-3);
+}
+
+.admin-label {
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
+  color: var(--ds-text-secondary);
+}
+
+.admin-input,
+.admin-select {
+  height: 34px;
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  outline: none;
+  transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast);
+}
+
+.admin-input:focus,
+.admin-select:focus {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+}
+
+.admin-field-hint {
+  font-size: var(--ds-text-2xs);
+  color: var(--ds-text-subtle);
+  line-height: 1.4;
+}
+
+.admin-field-hint code {
+  padding: 1px 4px;
+  border-radius: var(--ds-radius-2xs);
+  background: var(--ds-bg-code);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-3xs);
+}
+
+.admin-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* --------------------------------------------------------------------------
+ * 5. 테스트 액션 바 및 결과 뱃지
+ * -------------------------------------------------------------------------- */
+.admin-test-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-3);
+  background: var(--ds-bg-app);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+  margin-top: var(--ds-space-2);
+}
+
+.admin-test-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--ds-radius-sm);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-medium);
+}
+
+.admin-test-badge--ok {
+  background: rgba(var(--ds-rgb-green), 0.12);
+  color: var(--ds-color-success);
+  border: 1px solid rgba(var(--ds-rgb-green), 0.25);
+}
+
+.admin-test-badge--err {
+  background: var(--ds-bg-danger-subtle);
+  color: var(--ds-text-danger);
+  border: 1px solid rgba(var(--ds-rgb-red), 0.25);
+}
+
+/* --------------------------------------------------------------------------
+ * 6. 분산 환경 안내 카드 & 노드 상태
+ * -------------------------------------------------------------------------- */
+.admin-node-status-card {
+  padding: var(--ds-space-3) var(--ds-space-4);
+  background: var(--ds-bg-app);
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+}
+
+.admin-node-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--ds-space-3);
+}
+
+.admin-stat-label {
+  display: block;
+  font-size: var(--ds-text-3xs);
+  color: var(--ds-text-subtle);
+}
+
+.admin-stat-val {
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-bold);
+  color: var(--ds-text-strong);
+}
+
+.admin-guide-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  background: var(--ds-bg-app);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+}
+
+.admin-guide-card h4 {
+  margin: 0;
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-bold);
+  color: var(--ds-text-strong);
+}
+
+.admin-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+
+.admin-guide-step {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: var(--ds-space-3);
+  border-left: 2px solid var(--ds-color-accent);
+}
+
+.admin-guide-step strong {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-primary);
+}
+
+.admin-guide-step p {
+  margin: 0;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-muted);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+ * 7. 알림 및 로딩
+ * -------------------------------------------------------------------------- */
+.admin-alert {
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border-radius: var(--ds-radius-sm);
+  font-size: var(--ds-text-xs);
+}
+
+.admin-alert--success {
+  background: rgba(var(--ds-rgb-green), 0.12);
+  color: var(--ds-color-success);
+  border: 1px solid rgba(var(--ds-rgb-green), 0.25);
+}
+
+.admin-alert--error {
+  background: var(--ds-bg-danger-subtle);
+  color: var(--ds-text-danger);
+  border: 1px solid rgba(var(--ds-rgb-red), 0.25);
+}
+
+.admin-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-6);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-sm);
+}
+
+.admin-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ds-border-default);
+  border-top-color: var(--ds-color-accent);
+  border-radius: 50%;
+  animation: adminSpin 0.7s linear infinite;
+}
+
+@keyframes adminSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 8. 푸터
+ * -------------------------------------------------------------------------- */
+.admin-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ds-space-3) var(--ds-space-5);
+  border-top: 1px solid var(--ds-border-default);
+  background: var(--ds-bg-sidebar);
+}
+
+.admin-modal-footer__user-hint {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-subtle);
+}
+
+.admin-modal-footer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+
+/* 반응형 */
+@media (max-width: 640px) {
+  .admin-form-row {
+    grid-template-columns: 1fr;
+  }
+  .admin-node-status-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

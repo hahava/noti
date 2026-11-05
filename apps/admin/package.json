@@ -1,0 +1,27 @@
+{
+  "name": "@noty/admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Noty 어드민 (계정·역할, 모델, 색인·LLM 위키, 시스템 설정). 메인 앱과 다른 포트에서 실행한다.",
+  "scripts": {
+    "dev": "concurrently -k -n admin-api,admin-web \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "tsx server/index.ts"
+  },
+  "dependencies": {
+    "@noty/core": "*",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "vite": "^7.3.0"
+  }
+}

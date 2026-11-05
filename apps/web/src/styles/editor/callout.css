@@ -1,0 +1,131 @@
+/**
+ * Callout Block
+ * 노션 스타일 콜아웃. 변형(variant)은 색상 변수만 바꾸고, 실제 스타일은 .noty-callout 한 곳에서 정의합니다.
+ * 새 변형 추가 시: tokens.css에 --ds-callout-<name>-bg/-border 추가 → 아래 변형 블록 1개 추가 → CalloutBlock.tsx 프리셋 추가
+ * 모든 수치는 tokens.css의 디자인 토큰(--ds-*)을 참조합니다.
+ */
+
+/* --------------------------------------------------------------------------
+ * Variants: 색상 변수만 정의 (메뉴 스와치에서도 재사용)
+ * -------------------------------------------------------------------------- */
+.noty-callout--note {
+  --callout-bg: var(--ds-callout-note-bg);
+  --callout-border: var(--ds-callout-note-border);
+  --callout-accent: var(--ds-label-gray-text);
+}
+
+.noty-callout--info {
+  --callout-bg: var(--ds-callout-info-bg);
+  --callout-border: var(--ds-callout-info-border);
+  --callout-accent: var(--ds-label-blue-text);
+}
+
+.noty-callout--tip {
+  --callout-bg: var(--ds-callout-tip-bg);
+  --callout-border: var(--ds-callout-tip-border);
+  --callout-accent: var(--ds-label-green-text);
+}
+
+.noty-callout--warning {
+  --callout-bg: var(--ds-callout-warning-bg);
+  --callout-border: var(--ds-callout-warning-border);
+  --callout-accent: var(--ds-label-orange-text);
+}
+
+.noty-callout--danger {
+  --callout-bg: var(--ds-callout-danger-bg);
+  --callout-border: var(--ds-callout-danger-border);
+  --callout-accent: var(--ds-label-red-text);
+}
+
+.noty-callout--idea {
+  --callout-bg: var(--ds-callout-idea-bg);
+  --callout-border: var(--ds-callout-idea-border);
+  --callout-accent: var(--ds-label-purple-text);
+}
+
+/* --------------------------------------------------------------------------
+ * Block
+ * -------------------------------------------------------------------------- */
+.noty-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-2);
+  width: 100%;
+  margin: var(--ds-space-1) 0;
+  padding: var(--ds-space-3) var(--ds-space-4) var(--ds-space-3) var(--ds-space-3);
+  border: 1px solid var(--callout-border);
+  border-left: 3px solid var(--callout-accent);
+  border-radius: var(--ds-radius-sm);
+  background: var(--callout-bg);
+  color: var(--ds-text-primary);
+}
+
+.noty-callout__icon-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.noty-callout__icon {
+  font-size: var(--ds-text-xl);
+  line-height: 1;
+}
+
+.noty-callout__icon:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.noty-callout__content {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+  font-size: var(--ds-text-body);
+  line-height: var(--ds-text-body-line-height);
+}
+
+/* --------------------------------------------------------------------------
+ * Variant Menu (아이콘 클릭 시)
+ * -------------------------------------------------------------------------- */
+.noty-callout__menu {
+  position: absolute;
+  top: calc(100% + var(--ds-space-1));
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 148px;
+  padding: var(--ds-space-1);
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-popover);
+}
+
+.noty-callout__menu-item {
+  justify-content: flex-start;
+  gap: var(--ds-space-2);
+  height: 28px;
+  padding: 0 var(--ds-space-2);
+  color: var(--ds-text-primary);
+  font-size: var(--ds-text-xs);
+}
+
+.noty-callout__menu-item--active {
+  background: var(--ds-bg-active);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.noty-callout__menu-swatch,
+.noty-callout__slash-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--callout-border);
+  border-radius: var(--ds-radius-xs);
+  background: var(--callout-bg);
+  font-size: var(--ds-text-xs);
+}
