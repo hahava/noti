@@ -51,9 +51,11 @@ npm run verify -- --docker   # + 운영 이미지와 설치 마법사
 ## 운영 배포 (Linux + Docker)
 
 ```bash
-git clone <저장소> /srv/noty && cd /srv/noty
-deploy/install.sh            # 이미지 빌드 → 어드민 실행 → 설치 코드 출력
+curl -fsSL https://raw.githubusercontent.com/hahava/noti/main/deploy/install.sh | bash
 ```
+
+배포된 이미지(`ghcr.io/hahava/noty`, x86·ARM)를 받아 어드민을 띄우고 설치 코드 링크를 보여 줍니다. 소스는 필요 없습니다.
+특정 버전: `NOTY_IMAGE=ghcr.io/hahava/noty:1.0.0` 을 앞에 붙입니다. 저장소 안에서 `deploy/install.sh` 를 실행하면 소스로 빌드합니다.
 
 1. 브라우저로 `http://127.0.0.1:4010` 접속 (원격이면 `ssh -L 4010:127.0.0.1:4010 <서버>`)
 2. 설치 코드 입력 후 마법사에서 선택
@@ -79,11 +81,7 @@ deploy/restore.sh deploy/backups/<시각>
 
 ### 업데이트
 
-```bash
-deploy/backup.sh && git pull
-docker build -f deploy/Dockerfile --target app -t noty-app:latest .
-docker restart noty-api noty-collab noty-admin
-```
+새 버전 이미지는 `v*` 태그를 올리면 GitHub Actions 가 만듭니다. 설치본을 새 이미지로 바꾸는 기능은 아직 준비 중입니다(지금은 컨테이너를 새 이미지로 다시 만들어야 함).
 
 ## 데스크톱 앱
 

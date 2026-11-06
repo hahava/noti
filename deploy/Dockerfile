@@ -2,7 +2,8 @@
 # Noty 운영 이미지 (빌드 컨텍스트: 저장소 루트)
 # 하나의 이미지로 어드민(설치 마법사 포함), 메인 API(웹 화면 포함), 협업 서버를 모두 실행한다.
 
-FROM node:22.22.2-bookworm-slim AS deps
+# 의존성 설치·빌드는 빌드하는 컴퓨터의 아키텍처로 한 번만 한다 (결과물이 JS 라 플랫폼과 무관). 실행 단계만 대상 아키텍처로 만든다.
+FROM --platform=$BUILDPLATFORM node:22.22.2-bookworm-slim AS deps
 WORKDIR /app
 # devDependencies 의 electron 이 데스크톱 바이너리를 내려받지 않게 한다.
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
