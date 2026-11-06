@@ -51,12 +51,11 @@ deploy/install.sh            # 이미지 빌드 → 어드민 실행 → 설치 
 2. 설치 코드 입력 후 마법사에서 선택
    - 데이터베이스: 기존 Postgres URL / 이 서버에 Docker로 생성
    - AI: 기존 Ollama URL / Docker로 생성 / 나중에
-   - 서비스: Docker로 실행 / 직접 실행
+   - 접속 방법: 이 서버에서만 / 집·사내 네트워크 / 외부(VPN·터널) / 외부(도메인·HTTPS)
    - 첫 관리자 계정
-3. 완료 후 Noty: `http://127.0.0.1:4000` (설치 때 `0.0.0.0` 을 고르면 같은 네트워크에서 바로 접속)
+3. 완료 화면에 브라우저·데스크톱 앱에 입력할 주소와 남은 할 일이 나옵니다.
 
-모든 서비스는 기본적으로 `127.0.0.1` 에만 열립니다. 외부 공개는 리버스 프록시나 VPN을 쓰세요.
-Tailscale 예시: `deploy/tailscale-serve.sh`, `deploy/tailscale-acl.example.hujson`.
+외부 접속을 고르면 Noty 는 `127.0.0.1` 에만 열리고, 바깥 연결은 VPN·터널이나 리버스 프록시가 맡습니다.
 
 마법사 없이 `.env` 로 직접 운영하려면: `deploy/.env.example` → `deploy/.env` 작성 후
 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build`

@@ -12,7 +12,8 @@ import path from "node:path";
 export type DatabaseMode = "docker" | "external";
 export type OllamaMode = "docker" | "external" | "none";
 export type ServicesMode = "docker" | "manual";
-export type BindScope = "local" | "network";
+/** 사용자가 어디서 접속하는지: 이 서버만 / 같은 네트워크 / 외부(VPN·터널) / 외부(도메인·HTTPS) */
+export type AccessMode = "local" | "lan" | "tunnel" | "domain";
 
 export interface NotyInstallConfig {
   version: 1;
@@ -21,7 +22,7 @@ export interface NotyInstallConfig {
   ollama: { mode: OllamaMode; url: string; gpu?: boolean };
   services: {
     mode: ServicesMode;
-    bind: BindScope;
+    access: AccessMode;
     apiPort: number;
     collabPort: number;
     publicUrl?: string;

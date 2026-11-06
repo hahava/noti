@@ -4,9 +4,9 @@ import { LoginThrottle, parseAllowedOrigins, resolveAllowedOrigin } from "@noty/
 
 test("CORS allows everything when unconfigured, otherwise only listed origins and Electron", () => {
   assert.equal(resolveAllowedOrigin("http://evil.example", []), "*");
-  const allowed = parseAllowedOrigins(" https://noty.tail1234.ts.net/ , http://127.0.0.1:5173");
-  assert.deepEqual(allowed, ["https://noty.tail1234.ts.net", "http://127.0.0.1:5173"]);
-  assert.equal(resolveAllowedOrigin("https://noty.tail1234.ts.net", allowed), "https://noty.tail1234.ts.net");
+  const allowed = parseAllowedOrigins(" https://noty.example.com/ , http://127.0.0.1:5173");
+  assert.deepEqual(allowed, ["https://noty.example.com", "http://127.0.0.1:5173"]);
+  assert.equal(resolveAllowedOrigin("https://noty.example.com", allowed), "https://noty.example.com");
   assert.equal(resolveAllowedOrigin("null", allowed), "null");
   assert.equal(resolveAllowedOrigin("http://evil.example", allowed), null);
   assert.equal(resolveAllowedOrigin(undefined, allowed), null);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { setSetupCode, setupApi, type SetupEnvironment, type SetupJob, type SetupPlan } from "./api";
+import { setSetupCode, setupApi, type AccessMode, type SetupEnvironment, type SetupJob, type SetupPlan } from "./api";
 
 /**
  * 설치 마법사. 어드민을 처음 띄웠을 때(설치 설정 없음) 로그인 대신 나온다.
@@ -12,7 +12,7 @@ const STEPS: { id: StepId; label: string }[] = [
   { id: "environment", label: "환경 확인" },
   { id: "database", label: "데이터베이스" },
   { id: "ai", label: "AI (Ollama)" },
-  { id: "services", label: "서비스" },
+  { id: "services", label: "접속 방법" },
   { id: "admin", label: "관리자" },
   { id: "review", label: "확인" },
   { id: "install", label: "설치" },
@@ -46,6 +46,13 @@ function TestLine({ test }: { test: Test }) {
   );
 }
 
+const ACCESS_LABELS: Record<AccessMode, string> = {
+  local: "이 서버에서만",
+  lan: "집·사내 네트워크에서",
+  tunnel: "외부에서 — VPN·터널",
+  domain: "외부에서 — 도메인·HTTPS",
+};
+
 export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob | null; onFinished: () => void }) {
   const [step, setStep] = useState<StepId>(initialJob ? "install" : "code");
   const [code, setCode] = useState("");
@@ -68,7 +75,7 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
   const [pullModels, setPullModels] = useState(true);
 
   const [servicesMode, setServicesMode] = useState<"docker" | "manual">("docker");
-  const [bind, setBind] = useState<"local" | "network">("local");
+  const [access, setAccess] = useState<AccessMode>("lan");
   const [apiPort, setApiPort] = useState(4000);
   const [collabPort, setCollabPort] = useState(4001);
   const [publicUrl, setPublicUrl] = useState("");
@@ -162,7 +169,14 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
     database: dbMode === "docker" ? { mode: "docker", port: dbPort } : { mode: "external", url: dbUrl.trim() },
     ollama: ollamaMode === "docker" ? { mode: "docker", gpu } : ollamaMode === "external" ? { mode: "external", url: ollamaUrl.trim() } : { mode: "none" },
     models: { chat: chatModel.trim(), embedding: embeddingModel.trim(), pull: pullModels },
-    services: { mode: servicesMode, bind, apiPort, collabPort, publicUrl: publicUrl.trim() || undefined },
+    services: {
+      mode: servicesMode,
+      access,
+      apiPort,
+      collabPort,
+      // 주소 입력은 외부 접속 방법에서만 쓴다.
+      publicUrl: access === "tunnel" || access === "domain" ? publicUrl.trim() || undefined : undefined,
+    },
     admin: { username: adminName.trim(), displayName: adminDisplay.trim() || undefined, password: adminPassword },
   });
 
@@ -362,42 +376,65 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
   }
 
   if (step === "services") {
+    const domainInvalid = access === "domain" && !/^https:\/\/[^/\s]+/.test(publicUrl.trim());
     body = (
       <div className="stack">
-        <Choice checked={servicesMode === "docker"} onSelect={() => setServicesMode("docker")} title="이 서버에 Docker 로 실행 (추천)" disabled={!docker}>
-          웹/API(<code>noty-api</code>)와 협업(<code>noty-collab</code>) 컨테이너를 어드민과 같은 이미지로 띄웁니다.
+        <p>
+          <strong>Noty 에 어디서 접속하나요?</strong>
+          <br />
+          <span className="muted">브라우저와 데스크톱 앱 모두 여기서 고른 방법으로 접속합니다. 설치가 끝나면 입력할 주소와 할 일을 알려 드립니다.</span>
+        </p>
+        <Choice checked={access === "local"} onSelect={() => setAccess("local")} title="이 서버에서만">
+          이 서버의 브라우저·앱에서만 씁니다. 테스트할 때 알맞습니다.
         </Choice>
-        <Choice checked={servicesMode === "manual"} onSelect={() => setServicesMode("manual")} title="직접 실행">
-          필요한 환경변수를 보여 드리고, 서비스가 뜰 때까지 기다립니다.
+        <Choice checked={access === "lan"} onSelect={() => setAccess("lan")} title="집·사내 네트워크에서">
+          같은 공유기·사내망의 기기에서 <code>http://서버IP:{apiPort}</code> 로 접속합니다. 밖에서는 접속할 수 없습니다.
         </Choice>
-        <div className="grid-2">
-          <label className="field">
-            <span>웹/API 포트</span>
-            <input type="number" value={apiPort} onChange={(e) => setApiPort(Number(e.target.value))} />
+        <Choice checked={access === "tunnel"} onSelect={() => setAccess("tunnel")} title="외부에서 — VPN·터널 사용 (추천)">
+          VPN·터널 프로그램이 이 서버를 외부와 연결합니다. 공유기 포트를 열지 않아도 되고, 허용한 기기만 들어옵니다.
+        </Choice>
+        {access === "tunnel" && (
+          <label className="field indent">
+            <span>VPN·터널 주소 (알면 입력, 나중에 정해도 됨)</span>
+            <input value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} placeholder="https://noty.my-vpn.example" />
           </label>
-          <label className="field">
-            <span>협업 포트 (내부용)</span>
-            <input type="number" value={collabPort} onChange={(e) => setCollabPort(Number(e.target.value))} />
+        )}
+        <Choice checked={access === "domain"} onSelect={() => setAccess("domain")} title="외부에서 — 도메인·HTTPS">
+          내 도메인으로 인터넷에 공개합니다. 리버스 프록시(HTTPS)와 공유기 443 포트 개방이 필요합니다.
+        </Choice>
+        {access === "domain" && (
+          <label className="field indent">
+            <span>도메인 주소 (https://)</span>
+            <input value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} placeholder="https://noty.example.com" />
+            {domainInvalid && publicUrl.trim() && <span className="text-error">https:// 로 시작하는 주소를 입력하세요.</span>}
           </label>
-        </div>
-        <div className="stack-sm">
-          <strong className="small">접속 범위</strong>
-          <Choice checked={bind === "local"} onSelect={() => setBind("local")} title="이 서버에서만 (127.0.0.1)">
-            리버스 프록시나 VPN(Tailscale 등)으로 열 때. 가장 안전합니다.
-          </Choice>
-          <Choice checked={bind === "network"} onSelect={() => setBind("network")} title="같은 네트워크 전체 (0.0.0.0)">
-            사내망·집 공유기 안에서 <code>http://서버주소:{apiPort}</code> 로 바로 접속할 때.
-          </Choice>
-        </div>
-        <label className="field">
-          <span>접속 주소 (선택)</span>
-          <input value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} placeholder="https://noty.example.com" />
-          <span className="hint">사용자가 브라우저로 여는 주소. 비워 두면 같은 주소에서 연 화면과 Electron 앱만 허용합니다.</span>
-        </label>
+        )}
+
+        <details className="advanced">
+          <summary>고급 설정 (실행 방식·포트)</summary>
+          <div className="stack">
+            <Choice checked={servicesMode === "docker"} onSelect={() => setServicesMode("docker")} title="이 서버에 Docker 로 실행 (추천)" disabled={!docker}>
+              Noty 서버(웹·API, 실시간 협업)를 어드민과 같은 이미지로 띄웁니다.
+            </Choice>
+            <Choice checked={servicesMode === "manual"} onSelect={() => setServicesMode("manual")} title="직접 실행">
+              필요한 환경변수를 보여 드리고, Noty 서버가 뜰 때까지 기다립니다.
+            </Choice>
+            <div className="grid-2">
+              <label className="field">
+                <span>웹·API 포트 (접속 주소의 포트)</span>
+                <input type="number" value={apiPort} onChange={(e) => setApiPort(Number(e.target.value))} />
+              </label>
+              <label className="field">
+                <span>실시간 협업 포트 (내부용)</span>
+                <input type="number" value={collabPort} onChange={(e) => setCollabPort(Number(e.target.value))} />
+              </label>
+            </div>
+          </div>
+        </details>
       </div>
     );
     footer = (
-      <button type="button" className="btn btn--primary" onClick={next}>
+      <button type="button" className="btn btn--primary" disabled={domainInvalid} onClick={next}>
         다음
       </button>
     );
@@ -445,10 +482,8 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
         p.ollama.mode === "docker" ? `Docker 로 만들기 · ${p.ollama.gpu ? "GPU" : "CPU"}` : p.ollama.mode === "external" ? `연결 · ${p.ollama.url}` : "사용 안 함",
       ],
       ["모델", p.ollama.mode === "none" ? "-" : `채팅 ${p.models.chat} · 임베딩 ${p.models.embedding}${p.models.pull ? " · 없으면 받기" : ""}`],
-      [
-        "서비스",
-        `${p.services.mode === "docker" ? "Docker 로 실행" : "직접 실행"} · ${p.services.bind === "local" ? "127.0.0.1" : "0.0.0.0"}:${p.services.apiPort}${p.services.publicUrl ? ` · ${p.services.publicUrl}` : ""}`,
-      ],
+      ["접속 방법", `${ACCESS_LABELS[p.services.access]}${p.services.publicUrl ? ` · ${p.services.publicUrl}` : ""}`],
+      ["Noty 서버", `${p.services.mode === "docker" ? "Docker 로 실행" : "직접 실행"} · 포트 ${p.services.apiPort}`],
       ["관리자", p.admin.username],
     ];
     body = (
@@ -508,8 +543,29 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
           {job.log.join("\n") || "시작하는 중…"}
         </pre>
         {job.status === "done" && (
-          <div className="alert alert--ok">
-            설치가 끝났습니다. Noty: <strong>{job.appUrl}</strong> — 방금 만든 관리자 계정으로 로그인하세요.
+          <div className="stack-sm">
+            <div className="alert alert--ok">설치가 끝났습니다. 방금 만든 관리자 계정으로 로그인하세요.</div>
+            {job.access && (
+              <div className="card card--inner stack-sm">
+                <strong>{ACCESS_LABELS[job.access.mode]} 접속</strong>
+                <div>
+                  <span className="muted small">브라우저·데스크톱 앱에 입력할 주소</span>
+                  <pre className="code">
+                    {job.access.url ||
+                      (job.access.mode === "lan" ? `http://<이 서버의 IP>:${apiPort}` : "VPN·터널이 정해 준 주소")}
+                  </pre>
+                  {job.access.candidates.length > 1 && (
+                    <span className="muted small">다른 후보: {job.access.candidates.slice(1).join(", ")}</span>
+                  )}
+                </div>
+                <ol className="guide-steps">
+                  {job.access.steps.map((stepText) => (
+                    <li key={stepText}>{stepText}</li>
+                  ))}
+                </ol>
+                <span className="muted small">어드민은 보안을 위해 이 서버에서만(127.0.0.1) 열립니다. 다른 컴퓨터에서는 SSH 터널로 여세요.</span>
+              </div>
+            )}
           </div>
         )}
       </div>

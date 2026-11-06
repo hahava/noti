@@ -166,9 +166,12 @@ export interface SetupPlan {
   database: { mode: "docker"; port: number } | { mode: "external"; url: string };
   ollama: { mode: "docker"; gpu: boolean } | { mode: "external"; url: string } | { mode: "none" };
   models: { chat: string; embedding: string; pull: boolean };
-  services: { mode: "docker" | "manual"; bind: "local" | "network"; apiPort: number; collabPort: number; publicUrl?: string };
+  services: { mode: "docker" | "manual"; access: AccessMode; apiPort: number; collabPort: number; publicUrl?: string };
   admin: { username: string; password: string; displayName?: string };
 }
+
+/** 어디서 접속하는지: 이 서버만 / 같은 네트워크 / 외부(VPN·터널) / 외부(도메인·HTTPS) */
+export type AccessMode = "local" | "lan" | "tunnel" | "domain";
 
 export type SetupStepStatus = "pending" | "running" | "done" | "skipped" | "failed";
 export interface SetupJob {
@@ -178,6 +181,7 @@ export interface SetupJob {
   error?: string;
   manualEnv?: string;
   appUrl?: string;
+  access?: { mode: AccessMode; url: string | null; candidates: string[]; steps: string[] };
 }
 
 let setupCode = "";

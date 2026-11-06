@@ -454,10 +454,10 @@ const call = async (p, o = {}) => { const r = await fetch(A + p, { method: o.met
 const out = {};
 out.verify = (await call("/api/setup/verify", { method: "POST" })).status;
 const plan = { database: { mode: "docker", port: 15498 }, ollama: { mode: "none" }, models: { chat: "", embedding: "", pull: false },
-  services: { mode: "docker", bind: "local", apiPort: 4420, collabPort: 4421 }, admin: { username: "boss", password: "boss-pass-123" } };
+  services: { mode: "docker", access: "local", apiPort: 4420, collabPort: 4421 }, admin: { username: "boss", password: "boss-pass-123" } };
 out.install = (await call("/api/setup/install", { method: "POST", body: plan })).status;
 let job; for (let i = 0; i < 120; i++) { await new Promise((r) => setTimeout(r, 3000)); job = (await call("/api/setup/job")).data.job; if (job.status !== "running") break; }
-out.job = job.status; out.error = job.error;
+out.job = job.status; out.error = job.error; out.accessUrl = job.access?.url;
 out.locked = (await call("/api/setup/install", { method: "POST", body: plan })).status;
 const login = await (await fetch("http://127.0.0.1:4420/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "boss", password: "boss-pass-123" }) })).json();
 out.mainLogin = Boolean(login.token);
@@ -484,7 +484,7 @@ console.log("VERIFY_DOCKER=" + JSON.stringify(out));`,
     const line = drive.stdout.split("\n").find((l) => l.startsWith("VERIFY_DOCKER="));
     if (!line) throw new Error(`${drive.stdout}${drive.stderr}`.trim().split("\n").slice(-5).join("\n"));
     const r = JSON.parse(line.slice("VERIFY_DOCKER=".length));
-    record("설치 마법사 전체 설치 (DB Docker + 서비스 Docker)", r.verify === 200 && r.install === 202 && r.job === "done", r.error || "");
+    record("설치 마법사 전체 설치 (DB Docker + 서비스 Docker)", r.verify === 200 && r.install === 202 && r.job === "done" && r.accessUrl === "http://127.0.0.1:4420", r.error || `접속 안내: ${r.accessUrl}`);
     record("설치 후 잠금 · 로그인 · 웹 · /collab", r.locked === 409 && r.mainLogin && r.web === 200 && r.ws === "open", JSON.stringify({ locked: r.locked, login: r.mainLogin, web: r.web, ws: r.ws }));
   } catch (error) {
     record("설치 마법사", false, error instanceof Error ? error.message : String(error));

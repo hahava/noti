@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -193,11 +194,36 @@ export interface SetupPlan {
   database: { mode: "docker"; port: number } | { mode: "external"; url: string };
   ollama: { mode: "docker"; gpu: boolean } | { mode: "external"; url: string } | { mode: "none" };
   models: { chat: string; embedding: string; pull: boolean };
-  services: { mode: "docker" | "manual"; bind: "local" | "network"; apiPort: number; collabPort: number; publicUrl?: string };
+  /**
+   * access: 사용자가 어디서 접속하는지
+   *  - local  : 이 서버에서만 (127.0.0.1)
+   *  - lan    : 집·사내 네트워크에서 바로 (0.0.0.0)
+   *  - tunnel : 외부에서, VPN·터널이 이 서버의 127.0.0.1 포트를 대신 연결
+   *  - domain : 외부에서, 도메인 + HTTPS 리버스 프록시가 127.0.0.1 포트로 전달
+   */
+  services: {
+    mode: "docker" | "manual";
+    access: AccessMode;
+    apiPort: number;
+    collabPort: number;
+    publicUrl?: string;
+  };
   admin: { username: string; password: string; displayName?: string };
 }
 
 type StepStatus = "pending" | "running" | "done" | "skipped" | "failed";
+export type AccessMode = "local" | "lan" | "tunnel" | "domain";
+
+/** 설치가 끝난 뒤 보여 줄 접속 안내 */
+interface AccessGuide {
+  mode: AccessMode;
+  /** 브라우저·데스크톱 앱 로그인 화면에 넣을 주소 (정해지지 않았으면 null) */
+  url: string | null;
+  /** 같은 네트워크 접속일 때 후보 주소 */
+  candidates: string[];
+  steps: string[];
+}
+
 interface SetupJob {
   status: "running" | "done" | "failed";
   steps: { key: string; label: string; status: StepStatus; detail?: string }[];
@@ -205,6 +231,7 @@ interface SetupJob {
   error?: string;
   manualEnv?: string;
   appUrl?: string;
+  access?: AccessGuide;
   startedAt: string;
 }
 
@@ -224,7 +251,11 @@ function validatePlan(plan: SetupPlan): void {
   port(plan.services.apiPort, "웹/API");
   port(plan.services.collabPort, "협업");
   if (plan.services.apiPort === plan.services.collabPort) throw new Error("웹/API 와 협업 포트가 같습니다.");
+  if (!["local", "lan", "tunnel", "domain"].includes(plan.services.access)) throw new Error("접속 방법을 골라 주세요.");
   if (plan.services.publicUrl && !/^https?:\/\//.test(plan.services.publicUrl)) throw new Error("접속 주소는 http(s):// 로 시작해야 합니다.");
+  if (plan.services.access === "domain" && !/^https:\/\//.test(plan.services.publicUrl || "")) {
+    throw new Error("도메인 접속은 https:// 로 시작하는 주소가 필요합니다. (예: https://noty.example.com)");
+  }
   if (!plan.admin.username || !plan.admin.password) throw new Error("첫 관리자 아이디와 비밀번호를 입력하세요.");
   if (plan.admin.password.length < 8) throw new Error("관리자 비밀번호는 8자 이상이어야 합니다.");
   const needsDocker = plan.database.mode === "docker" || plan.ollama.mode === "docker" || plan.services.mode === "docker";
@@ -409,7 +440,9 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
     );
 
     /* 4. 서비스 */
-    const host = plan.services.bind === "network" ? "0.0.0.0" : "127.0.0.1";
+    // 같은 네트워크 접속만 모든 인터페이스에 연다. 나머지는 127.0.0.1 에만 열고, 바깥 연결은 VPN·터널이나 프록시가 맡는다.
+    const host = plan.services.access === "lan" ? "0.0.0.0" : "127.0.0.1";
+    const behindProxy = plan.services.access === "tunnel" || plan.services.access === "domain";
     const serviceEnv: Record<string, string> = {
       NODE_ENV: "production",
       DATABASE_URL: databaseUrl,
@@ -419,9 +452,12 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
       NOTY_DISABLE_BOOTSTRAP_ADMIN: "1",
       // 웹 화면은 같은 출처에서 열리고 Electron 은 따로 허용되므로, 접속 주소가 없으면 다른 출처는 막는다.
       CORS_ALLOWED_ORIGINS: plan.services.publicUrl?.replace(/\/+$/, "") || "same-origin",
+      // VPN·터널이나 프록시가 앞에 있으면 실제 접속 주소(X-Forwarded-For)를 믿어 로그인 시도 제한에 쓴다.
+      ...(behindProxy ? { TRUST_PROXY: "1" } : {}),
       COLLAB_PORT: String(plan.services.collabPort),
     };
-    const appUrl = plan.services.publicUrl || `http://${plan.services.bind === "network" ? "<서버 주소>" : "127.0.0.1"}:${plan.services.apiPort}`;
+    current.access = buildAccessGuide(plan);
+    const appUrl = current.access.url || `http://127.0.0.1:${plan.services.apiPort}`;
     current.appUrl = appUrl;
     await step("services", async () => {
       const healthUrl = isBridge()
@@ -529,6 +565,67 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
     const failedStep = current.steps.find((s) => s.status === "failed");
     if (failedStep) failedStep.detail = current.error;
     log(`실패: ${current.error}`);
+  }
+}
+
+/** 같은 네트워크에서 쓸 이 서버의 주소 후보 (host 방식에서만 알 수 있다) */
+function lanAddresses(port: number): string[] {
+  if (isBridge()) return [];
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((a): a is os.NetworkInterfaceInfo => Boolean(a && a.family === "IPv4" && !a.internal))
+    .map((a) => `http://${a.address}:${port}`);
+}
+
+function buildAccessGuide(plan: SetupPlan): AccessGuide {
+  const port = plan.services.apiPort;
+  const local = `127.0.0.1:${port}`;
+  const publicUrl = plan.services.publicUrl?.replace(/\/+$/, "") || null;
+  switch (plan.services.access) {
+    case "local":
+      return {
+        mode: "local",
+        url: `http://${local}`,
+        candidates: [],
+        steps: ["이 서버에서만 열립니다. 이 서버의 브라우저나 데스크톱 앱에서 위 주소로 접속하세요."],
+      };
+    case "lan": {
+      const candidates = lanAddresses(port);
+      return {
+        mode: "lan",
+        url: candidates[0] || null,
+        candidates,
+        steps: [
+          `같은 네트워크의 기기에서 http://<이 서버의 IP>:${port} 로 접속합니다.`,
+          "서버 IP 는 고정해 두는 것이 좋습니다(공유기의 DHCP 고정 할당).",
+          "암호화되지 않은 http 이므로 집·사내 네트워크 밖으로는 열지 마세요.",
+        ],
+      };
+    }
+    case "tunnel":
+      return {
+        mode: "tunnel",
+        url: publicUrl,
+        candidates: [],
+        steps: [
+          `VPN·터널 프로그램에서 이 서버의 ${local} 을(를) 외부 주소로 연결하세요. 가능하면 HTTPS 로 여세요.`,
+          "실시간 협업을 위해 WebSocket(/collab 경로)도 함께 전달되어야 합니다.",
+          publicUrl
+            ? `접속하는 기기에서 VPN 을 켠 뒤 ${publicUrl} 로 접속합니다.`
+            : "VPN·터널이 정해 준 주소를 브라우저·데스크톱 앱 로그인 화면의 서버 주소에 입력합니다.",
+        ],
+      };
+    case "domain":
+      return {
+        mode: "domain",
+        url: publicUrl,
+        candidates: [],
+        steps: [
+          `리버스 프록시(HTTPS)에서 ${publicUrl ?? "도메인"} → http://${local} 로 전달하도록 설정하세요.`,
+          "WebSocket 업그레이드(/collab 경로)를 허용하고, X-Forwarded-For 헤더를 넘겨 주세요.",
+          "공유기·방화벽에서 443 포트를 이 서버로 열어야 합니다. 인터넷에 공개되므로 계정 비밀번호를 강하게 정하세요.",
+        ],
+      };
   }
 }
 
