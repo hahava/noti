@@ -278,9 +278,12 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
     body = (
       <div className="stack">
         <Choice checked={dbMode === "docker"} onSelect={() => setDbMode("docker")} title="이 서버에 Docker 로 만들기 (추천)" disabled={!docker}>
-          Postgres 17 + pgvector + PGroonga(한국어 검색) 이미지를 만들고 127.0.0.1 에만 엽니다. 비밀번호는 자동으로 만듭니다.
+          Postgres 17 + pgvector + PGroonga(한국어 검색) 이미지를 만듭니다. 비밀번호는 자동으로 만듭니다.
+          {env?.networkMode === "bridge"
+            ? " Noty 서버와 같은 Docker 네트워크 안에서만 쓰여 이 컴퓨터의 포트를 열지 않습니다."
+            : " 이 서버의 127.0.0.1 에만 엽니다."}
         </Choice>
-        {dbMode === "docker" && (
+        {dbMode === "docker" && env?.networkMode !== "bridge" && (
           <label className="field indent">
             <span>포트 (127.0.0.1)</span>
             <input type="number" value={dbPort} onChange={(e) => setDbPort(Number(e.target.value))} />

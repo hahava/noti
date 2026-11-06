@@ -370,14 +370,16 @@ async function runInstall(plan: SetupPlan, current: SetupJob): Promise<void> {
           image: POSTGRES_IMAGE,
           network: isBridge() ? DOCKER_NETWORK : undefined,
           env: { POSTGRES_USER: "noty", POSTGRES_PASSWORD: secrets.postgresPassword, POSTGRES_DB: "noty" },
-          publish: [{ containerPort: 5432, hostPort: plan.database.port }],
+          // host 방식은 서비스가 127.0.0.1:포트 로 붙으므로 연다.
+          // bridge 방식은 서비스가 Docker 네트워크 안에서 이름(noty-db)으로 붙으므로 호스트 포트를 열지 않는다 (충돌 없음).
+          publish: isBridge() ? undefined : [{ containerPort: 5432, hostPort: plan.database.port }],
           volumes: [{ volume: VOLUMES.db, target: "/var/lib/postgresql/data" }],
         });
         log("DB 컨테이너를 시작했습니다. 준비될 때까지 기다립니다…");
         await waitFor(async () => (await testDatabaseUrl(databaseUrl)).ok, 120_000, "DB 가 시간 안에 준비되지 않았습니다.", async () =>
           containerLogs(NAMES.db),
         );
-        return `127.0.0.1:${plan.database.port}`;
+        return isBridge() ? `Docker 네트워크 안 (${NAMES.db}:5432)` : `127.0.0.1:${plan.database.port}`;
       }
       const result = await testDatabaseUrl(databaseUrl);
       result.warnings.forEach((w) => log(`주의: ${w}`));

@@ -121,6 +121,10 @@ export function explainDockerError(error: unknown): string {
     return `어드민이 Docker 소켓(${SOCKET_PATH})에 접근할 권한이 없습니다. 어드민 컨테이너를 --group-add $(stat -c %g ${SOCKET_PATH}) 로 실행하세요 (deploy/install.sh 가 해 줍니다).`;
   }
   if (/ENOENT|ECONNREFUSED/.test(message)) return `Docker 에 연결할 수 없습니다 (${SOCKET_PATH}). Docker 가 실행 중인지 확인하세요.`;
+  const portInUse = message.match(/(?:listen tcp\d?\s+)?([\d.]+|\[[^\]]+\]):(\d+): bind: address already in use/);
+  if (portInUse) {
+    return `이 컴퓨터의 ${portInUse[2]} 포트를 이미 다른 프로그램(또는 다른 컨테이너)이 쓰고 있습니다. 그 프로그램을 끄거나, 설치 마법사에서 다른 포트를 고른 뒤 다시 시도하세요.`;
+  }
   return message;
 }
 
