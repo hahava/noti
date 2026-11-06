@@ -1,0 +1,511 @@
+/* ==========================================================================
+ * 그래프 뷰 (전체 화면 레이어)
+ * ========================================================================== */
+.graph-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg-app);
+}
+
+.graph-overlay__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ds-border-default);
+  background: var(--ds-bg-surface);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-primary);
+  flex-wrap: wrap;
+}
+
+.graph-overlay__meta,
+.graph-overlay__legend,
+.graph-overlay__hint {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+
+.graph-overlay__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graph-legend {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 6px;
+  border-radius: var(--ds-radius-circle);
+  background: var(--ds-text-subtle);
+}
+
+.graph-legend--canvas {
+  border-radius: 2px;
+  background: var(--ds-text-secondary);
+}
+
+.graph-legend--current {
+  background: var(--ds-border-accent);
+}
+
+.graph-overlay__search {
+  margin-left: auto;
+  width: 200px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font: inherit;
+  font-size: var(--ds-text-xs);
+}
+
+.graph-overlay__close kbd {
+  margin-left: 4px;
+  font-size: var(--ds-text-3xs);
+  color: var(--ds-text-subtle);
+}
+
+.graph-overlay__message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-sm);
+}
+
+.graph-overlay__hint {
+  padding: 6px 16px;
+  text-align: center;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.graph-svg {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  cursor: grab;
+}
+
+.graph-link {
+  stroke: var(--ds-border-default);
+  stroke-width: 1.2;
+  transition: opacity 0.15s;
+}
+
+.graph-node circle,
+.graph-node rect {
+  fill: var(--ds-text-subtle);
+  stroke: var(--ds-bg-app);
+  stroke-width: 1.5;
+  transition: fill 0.15s, opacity 0.15s;
+}
+
+.graph-node--canvas rect {
+  fill: var(--ds-text-secondary);
+}
+
+.graph-node--current circle,
+.graph-node--current rect,
+.graph-node.is-focused circle,
+.graph-node.is-focused rect,
+.graph-node.is-match circle,
+.graph-node.is-match rect {
+  fill: var(--ds-border-accent);
+}
+
+.graph-label {
+  fill: var(--ds-text-secondary);
+  font-size: 11px;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+
+.graph-svg--far .graph-label {
+  opacity: 0;
+}
+
+.graph-svg--far .graph-node.is-focused .graph-label,
+.graph-svg--far .graph-node--current .graph-label {
+  opacity: 1;
+}
+
+.graph-node.is-dimmed,
+.graph-link.is-dimmed {
+  opacity: 0.15;
+}
+
+/* ==========================================================================
+ * 캔버스
+ * ========================================================================== */
+.canvas-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--ds-bg-app);
+}
+
+.canvas-pane .react-flow {
+  --xy-background-color: var(--ds-bg-app);
+  --xy-node-border-radius: var(--ds-radius-md);
+  --xy-edge-stroke: var(--ds-text-subtle);
+  --xy-edge-stroke-selected: var(--ds-border-accent);
+  --xy-controls-button-background-color: var(--ds-bg-surface);
+  --xy-controls-button-color: var(--ds-text-secondary);
+  --xy-controls-button-border-color: var(--ds-border-default);
+  --xy-minimap-background-color: var(--ds-bg-surface);
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+  padding: 6px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.canvas-toolbar__title {
+  width: 180px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: var(--ds-text-strong);
+  font: inherit;
+  font-size: var(--ds-text-md);
+  font-weight: 600;
+}
+
+.canvas-toolbar__title:hover,
+.canvas-toolbar__title:focus {
+  border-color: var(--ds-border-input);
+  outline: none;
+}
+
+.canvas-toolbar__status {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-toolbar-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-secondary);
+  font: inherit;
+  font-size: var(--ds-text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.canvas-toolbar-btn:hover {
+  background: var(--ds-bg-hover);
+}
+
+.canvas-toolbar__location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-toolbar__location select {
+  height: 28px;
+  max-width: 200px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font: inherit;
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-picker {
+  top: 52px;
+  width: 280px;
+  padding: 8px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-popover);
+}
+
+.canvas-picker input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font: inherit;
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-picker ul {
+  max-height: 280px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.canvas-picker button {
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: transparent;
+  color: var(--ds-text-primary);
+  font: inherit;
+  font-size: var(--ds-text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-picker button:hover {
+  background: var(--ds-bg-hover);
+}
+
+.canvas-picker__empty,
+.canvas-empty-hint {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-empty-hint {
+  top: 72px;
+  max-width: 360px;
+  padding: 10px 14px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  text-align: center;
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.canvas-message {
+  padding: 8px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-text-strong);
+  color: var(--ds-bg-surface);
+  font-size: var(--ds-text-xs);
+  cursor: pointer;
+}
+
+/* 카드 */
+.canvas-card {
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  box-shadow: var(--ds-shadow-xs);
+  overflow: hidden;
+  font-size: var(--ds-text-sm);
+}
+
+.react-flow__node.selected .canvas-card {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+}
+
+.canvas-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ds-text-strong);
+  font-weight: 600;
+  font-size: var(--ds-text-md);
+}
+
+.canvas-card__icon {
+  flex-shrink: 0;
+}
+
+.canvas-card__excerpt {
+  margin-top: 6px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.canvas-card__url {
+  word-break: break-all;
+}
+
+.canvas-card--missing {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.canvas-card__text {
+  height: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  line-height: 1.5;
+}
+
+.canvas-card__placeholder {
+  color: var(--ds-text-subtle);
+}
+
+.canvas-card__textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--ds-text-primary);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.canvas-card--image {
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.canvas-card--image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.canvas-group {
+  width: 100%;
+  height: 100%;
+  border: 1.5px dashed var(--ds-border-input);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-hover);
+}
+
+.react-flow__node.selected .canvas-group {
+  border-color: var(--ds-border-accent);
+}
+
+.canvas-group__label {
+  display: inline-block;
+  margin: 8px 10px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+  font-weight: 600;
+}
+
+/* 연결 손잡이: 카드에 마우스를 올렸을 때만 보인다 */
+.canvas-handle {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ds-bg-surface);
+  background: var(--ds-border-accent);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.react-flow__node:hover .canvas-handle,
+.react-flow__node.selected .canvas-handle {
+  opacity: 1;
+}
+
+.canvas-handle--hidden {
+  display: none;
+}
+
+.canvas-resize-line {
+  border-color: var(--ds-border-accent) !important;
+}
+
+.canvas-resize-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 2px !important;
+  background: var(--ds-border-accent) !important;
+}
+
+.canvas-minimap {
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+}
+
+.canvas-edge .react-flow__edge-text {
+  fill: var(--ds-text-secondary);
+}
+
+/* 페이지 본문 안 캔버스 미리보기 (보기 전용) */
+.canvas-preview {
+  width: 100%;
+  margin: 4px 0;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-app);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.canvas-preview:hover {
+  border-color: var(--ds-border-input);
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.canvas-preview__header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-size: var(--ds-text-sm);
+  font-weight: 600;
+}
+
+.canvas-preview__open {
+  color: var(--ds-text-muted);
+  font-weight: 400;
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-preview__body {
+  position: relative;
+  height: 240px;
+  display: grid;
+  place-items: center;
+}
+
+.canvas-preview__body .react-flow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas-preview__empty {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}

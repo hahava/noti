@@ -266,7 +266,22 @@ export function resolveUploadUrl(url: string): Promise<string> {
   return entry.promise;
 }
 
+export type GraphData = {
+  nodes: { id: string; title: string; icon: string | null; kind: "page" | "canvas" }[];
+  links: { source: string; target: string }[];
+};
+
+export type PagePreview = { title: string; icon: string | null; kind: string; excerpt: string; deleted: boolean };
+
 export const workspaceApi = {
+  getGraph: () => requestJson<GraphData>("/api/graph"),
+  getCanvas: (pageId: string) =>
+    requestJson<{ canvas: import("@noty/shared/canvas").CanvasData }>(`/api/pages/${encodeURIComponent(pageId)}/canvas`),
+  getPagePreviews: (ids: readonly string[]) =>
+    requestJson<{ previews: Record<string, PagePreview> }>(
+      `/api/pages/previews?ids=${ids.map(encodeURIComponent).join(",")}`,
+    ),
+
   listCollections: () =>
     requestJson<{ collections: Array<{ id: string; title: string; ownerPageTitle: string }> }>("/api/collections"),
 
@@ -355,6 +370,7 @@ export const workspaceApi = {
     parentId?: string | null;
     title?: string;
     insertIntoParentBlocks?: boolean;
+    kind?: "page" | "canvas";
   }) =>
     requestJson<{ page: PageItem; pages: PageItem[] }>("/api/pages", {
       method: "POST",

@@ -9,6 +9,7 @@ import {
   deletePagesBatchInDb,
   ensureSchema,
   encryptStoredSecrets,
+  PageStructureError,
   getEffectiveUploadsDir,
   getSystemSettingsFromDb,
   getUserBySessionToken,
@@ -36,6 +37,7 @@ import { hybridSearch, retrieveSources } from "./search.js";
 import { LoginThrottle, parseAllowedOrigins, resolveAllowedOrigin } from "@noty/core/http-security";
 import { DEFAULT_UPLOADS_DIR } from "@noty/core/paths";
 import { attachCollaborationProxy, serveWebApp } from "./web-gateway.js";
+import { getCanvasSnapshot, getPagePreviews, getWorkspaceGraph } from "./graph.js";
 import { createSignedUploadUrl, parseUploadFileName, UPLOADS_PREFIX, verifyUploadSignature } from "./file-access.js";
 import {
   getDigestSummaries,
@@ -282,6 +284,27 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 2.1. 그래프 뷰: 페이지(점)와 링크(선)
+    if (req.method === "GET" && pathname === "/api/graph") {
+      sendJson(res, 200, await getWorkspaceGraph());
+      return;
+    }
+
+    // 2.2. 캔버스 카드에 보여 줄 페이지 미리보기: GET /api/pages/previews?ids=a,b
+    if (req.method === "GET" && pathname === "/api/pages/previews") {
+      const ids = (url.searchParams.get("ids") || "").split(",").map((id) => id.trim()).filter(Boolean);
+      sendJson(res, 200, { previews: await getPagePreviews(ids) });
+      return;
+    }
+
+    // 2.3. 캔버스 내용(카드·선) 읽기 — 페이지 안 미리보기 블록용: GET /api/pages/:id/canvas
+    const canvasMatch = pathname.match(/^\/api\/pages\/([^/]+)\/canvas$/);
+    if (canvasMatch && req.method === "GET") {
+      const snapshot = await getCanvasSnapshot(decodeURIComponent(canvasMatch[1]));
+      sendJson(res, snapshot ? 200 : 404, snapshot ? { canvas: snapshot } : { error: "캔버스를 찾을 수 없습니다." });
+      return;
+    }
+
     // 2. Pages list & create (로그인한 계정별 개인 페이지 공간 분리)
     if (pathname === "/api/pages") {
       if (req.method === "GET") {
@@ -294,6 +317,7 @@ const server = http.createServer(async (req, res) => {
           parentId?: string | null;
           title?: string;
           insertIntoParentBlocks?: boolean;
+          kind?: "page" | "canvas";
         }>(req);
         const result = await createPageInDb(body, authUser.id);
         sendJson(res, 201, result);
@@ -594,6 +618,10 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
+    if (error instanceof PageStructureError) {
+      sendJson(res, 400, { error: error.message });
+      return;
+    }
     console.error("[server error]", error);
     sendJson(res, 500, {
       error: error instanceof Error ? error.message : "Internal server error",

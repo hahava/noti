@@ -78,6 +78,8 @@ import {
 import { AIChatPanel, AISparkleSvgIcon, blocksToPlainText } from "./AIChatPanel";
 import { AIProviderSettings } from "./AIProviderSettings";
 import { revealBlockWhenReady, SearchHitContent, useWorkspaceSearch } from "./WorkspaceSearch";
+import { CanvasPane, CanvasPreview } from "./CanvasPane";
+import { GraphView } from "./GraphView";
 import type {
   AuthSession,
   PageItem,
@@ -141,16 +143,40 @@ function DocSvgIcon({ hasChildren = false }: { hasChildren?: boolean }) {
   );
 }
 
+function CanvasSvgIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.75" y="2.25" width="5.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.25" />
+      <rect x="8.75" y="9.25" width="5.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M7.25 4.5h2.5a1.5 1.5 0 0 1 1.5 1.5v3.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GraphSvgIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="4" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="12" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="9" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.8 5.3 7.9 10M5.9 4.3l4.5-.2M11.4 5.4l-1.5 4.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function PageIconOrDoc({
   icon,
   hasChildren = false,
+  kind,
 }: {
   icon?: string | null;
   hasChildren?: boolean;
+  kind?: PageItem["kind"];
 }) {
   if (icon && icon.trim()) {
     return <span className="page-emoji-icon">{icon}</span>;
   }
+  if (kind === "canvas") return <CanvasSvgIcon />;
   return <DocSvgIcon hasChildren={hasChildren} />;
 }
 
@@ -416,6 +442,11 @@ function PageBlockRow({ pageId }: { pageId: string }) {
     );
   }
 
+  // 캔버스는 본문 안에서 보기 전용 미리보기로 보여 준다 (누르면 캔버스가 열림)
+  if (target.kind === "canvas") {
+    return <CanvasPreview pageId={pageId} pagesById={pagesById} onOpen={() => onSelectPage(pageId, {})} />;
+  }
+
   return (
     <div
       className="bn-page-block"
@@ -430,7 +461,7 @@ function PageBlockRow({ pageId }: { pageId: string }) {
       }}
     >
       <span className="bn-page-block__icon">
-        <PageIconOrDoc icon={target.icon} hasChildren={subCount > 0} />
+        <PageIconOrDoc icon={target.icon} hasChildren={subCount > 0} kind={target.kind} />
       </span>
       <span className="bn-page-block__title">{target.title || "제목 없는 문서"}</span>
       {subCount > 0 && <span className="bn-page-block__meta">{subCount}</span>}
@@ -479,7 +510,7 @@ function PageLinkPill({ pageId }: { pageId: string }) {
       }}
     >
       <span className="bn-page-link__icon">
-        <PageIconOrDoc icon={target.icon} />
+        <PageIconOrDoc icon={target.icon} kind={target.kind} />
       </span>
       <span className="bn-page-link__title">{target.title || "제목 없는 문서"}</span>
     </span>
@@ -1128,6 +1159,7 @@ interface EditorPaneProps {
   onInsertPageBlockAndOpen: (
     parentId: string,
     getUpdatedParentBlocks: (newChildId: string) => readonly unknown[],
+    kind?: "page" | "canvas",
   ) => Promise<void>;
   onSaveBlocks: (pageId: string, blocks: readonly unknown[], title?: string) => void;
   onTitlePreviewChange: (pageId: string, title: string) => void;
@@ -1550,6 +1582,36 @@ function EditorPane({
     },
   });
 
+  const getCanvasBlockSlashItem = (): DefaultReactSuggestionItem => ({
+    title: "캔버스",
+    subtext: "현재 위치에 하위 캔버스를 만들고 엽니다 (본문에는 미리보기로 보임)",
+    aliases: ["canvas", "whiteboard", "캔버스", "화이트보드", "보드판"],
+    group: "기본 블록",
+    icon: <CanvasSvgIcon />,
+    onItemClick: () => {
+      void onInsertPageBlockAndOpen(
+        pageId,
+        (newChildId) => {
+          if (!childPageIdsRef.current.includes(newChildId)) {
+            childPageIdsRef.current = [...childPageIdsRef.current, newChildId];
+          }
+          observedPageBlockIdsRef.current.add(newChildId);
+          suppressOnChangeRef.current = true;
+          try {
+            insertOrUpdateBlockForSlashMenu(editor, {
+              type: "page",
+              props: { pageId: newChildId },
+            } as any);
+          } finally {
+            suppressOnChangeRef.current = false;
+          }
+          return editor.document;
+        },
+        "canvas",
+      );
+    },
+  });
+
   const getCollectionBlockSlashItem = (): DefaultReactSuggestionItem => ({
     title: "컬렉션",
     subtext: "속성을 직접 만들고 표·보드·캘린더·갤러리로 보는 데이터베이스",
@@ -1732,6 +1794,7 @@ function EditorPane({
                 getDefaultReactSlashMenuItems(editor),
                 [
                   getPageBlockSlashItem(),
+                  getCanvasBlockSlashItem(),
                   getCollectionBlockSlashItem(),
                   getLinkedCollectionSlashItem(),
                 ],
@@ -1880,8 +1943,10 @@ function PageTreeNode({
       return;
     }
     event.stopPropagation();
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData("text/plain", page.id);
+    // 캔버스에 끌어다 놓으면 페이지 카드가 된다
+    event.dataTransfer.setData("application/x-noty-page", page.id);
     onDragStartPage(page.id);
   };
 
@@ -1892,8 +1957,17 @@ function PageTreeNode({
 
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = (event.clientY - rect.top) / Math.max(rect.height, 1);
+    // 캔버스 안(하위)으로는 넣지 않고 위·아래로만 놓는다
     const placement: DropPlacement =
-      ratio < 0.25 ? "before" : ratio > 0.75 ? "after" : "inside";
+      page.kind === "canvas"
+        ? ratio < 0.5
+          ? "before"
+          : "after"
+        : ratio < 0.25
+          ? "before"
+          : ratio > 0.75
+            ? "after"
+            : "inside";
 
     if (
       dropIndicator?.targetId !== page.id ||
@@ -1907,7 +1981,7 @@ function PageTreeNode({
     event.preventDefault();
     event.stopPropagation();
     const placement =
-      dropIndicator?.targetId === page.id ? dropIndicator.placement : "inside";
+      dropIndicator?.targetId === page.id ? dropIndicator.placement : page.kind === "canvas" ? "after" : "inside";
     onDropPage(page.id, placement);
   };
 
@@ -1976,7 +2050,7 @@ function PageTreeNode({
           title="아이콘 변경"
           aria-label="페이지 아이콘 변경"
         >
-          <PageIconOrDoc icon={page.icon} hasChildren={hasChildren} />
+          <PageIconOrDoc icon={page.icon} hasChildren={hasChildren} kind={page.kind} />
         </button>
 
         {isEditing ? (
@@ -2017,16 +2091,19 @@ function PageTreeNode({
             >
               <MoreDotsSvgIcon />
             </button>
-            <button
-              type="button"
-              className="ds-btn ds-btn--ghost ds-btn--icon tree-action-btn"
-              data-requires-edit
-              onClick={handleAddSubpage}
-              title="하위 페이지 추가"
-              aria-label="하위 페이지 추가"
-            >
-              <PlusSvgIcon />
-            </button>
+            {/* 캔버스 아래에는 페이지를 두지 않는다 (페이지는 카드로 올린다) */}
+            {page.kind !== "canvas" && (
+              <button
+                type="button"
+                className="ds-btn ds-btn--ghost ds-btn--icon tree-action-btn"
+                data-requires-edit
+                onClick={handleAddSubpage}
+                title="하위 페이지 추가"
+                aria-label="하위 페이지 추가"
+              >
+                <PlusSvgIcon />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2189,6 +2266,7 @@ export default function App() {
 
   // 검색 모달 (⌘K) 및 설정 모달 (⌘,), 관리자 모달 상태
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isGraphOpen, setIsGraphOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   // 우측 AI 어시스턴트 패널 (⌘J)
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
@@ -3103,13 +3181,14 @@ export default function App() {
     });
   };
 
-  const handleCreatePage = async (parentId: string | null = null) => {
+  const handleCreatePage = async (parentId: string | null = null, kind: "page" | "canvas" = "page") => {
     if (isReadOnlyUser) return;
     await flushAllPendingSaves();
     const { page, pages: updatedPages } = await workspaceApi.createPage({
       parentId,
-      title: "제목 없는 문서",
+      title: kind === "canvas" ? "제목 없는 캔버스" : "제목 없는 문서",
       insertIntoParentBlocks: true,
+      kind,
     });
     setPages(updatedPages);
     if (parentId) {
@@ -3175,6 +3254,7 @@ export default function App() {
     parentId: string,
     getUpdatedParentBlocks: (newChildId: string) => readonly unknown[],
     sourceTabId?: string,
+    kind: "page" | "canvas" = "page",
   ) => {
     if (isReadOnlyUser) return;
     const existingPending = pendingSavesRef.current.get(parentId);
@@ -3185,8 +3265,9 @@ export default function App() {
 
     const { page, pages: updatedPages } = await workspaceApi.createPage({
       parentId,
-      title: "제목 없는 문서",
+      title: kind === "canvas" ? "제목 없는 캔버스" : "제목 없는 문서",
       insertIntoParentBlocks: false,
+      kind,
     });
     setPages(updatedPages);
 
@@ -3531,6 +3612,38 @@ export default function App() {
   };
 
   /** 다른 사용자의 구조 변경이 본문으로 전달됐을 때 페이지 목록을 서버에서 다시 받아온다. */
+  /** 캔버스에서 새 페이지 만들기: 정해진 위치에 만들고(필요하면 본문을 채우고) id 를 돌려준다. 탭은 옮기지 않는다. */
+  const handleCreatePageFromCanvas = async (parentId: string | null, title: string, bodyText?: string): Promise<string | null> => {
+    if (isReadOnlyUser) return null;
+    try {
+      const { page, pages: updatedPages } = await workspaceApi.createPage({ parentId, title, insertIntoParentBlocks: true });
+      setPages(updatedPages);
+      if (bodyText) {
+        const blocks = [
+          { type: "heading", props: { level: 1 }, content: title },
+          ...bodyText.split("\n").map((line) => ({ type: "paragraph", content: line })),
+        ];
+        await workspaceApi.saveDocument(blocks, { id: page.id, title });
+      }
+      if (parentId) {
+        const updatedPageMap = new Map(updatedPages.map((item) => [item.id, item]));
+        expandPagePath(parentId, updatedPageMap);
+      }
+      return page.id;
+    } catch (error) {
+      console.error("Failed to create page from canvas", error);
+      window.alert(error instanceof Error ? error.message : "페이지를 만들지 못했습니다.");
+      return null;
+    }
+  };
+
+  const handleRenamePageTitle = (pageId: string, title: string) => {
+    void workspaceApi
+      .updatePage({ id: pageId, title })
+      .then(({ pages: latestPages }) => setPages(latestPages))
+      .catch((error) => console.error("Failed to rename page", error));
+  };
+
   const handleRefreshPages = () => {
     void workspaceApi
       .listPages()
@@ -3856,6 +3969,13 @@ export default function App() {
             <kbd className="sidebar-action-row__shortcut">⌘K</kbd>
           </button>
 
+          <button type="button" className="sidebar-action-row" onClick={() => setIsGraphOpen(true)} title="페이지와 링크를 한눈에 보기">
+            <span className="sidebar-action-row__icon">
+              <GraphSvgIcon />
+            </span>
+            <span className="sidebar-action-row__label">그래프</span>
+          </button>
+
           <button
             type="button"
             className="sidebar-action-row"
@@ -3866,6 +3986,18 @@ export default function App() {
               <PlusSvgIcon />
             </span>
             <span className="sidebar-action-row__label">새 페이지</span>
+          </button>
+
+          <button
+            type="button"
+            className="sidebar-action-row"
+            data-requires-edit
+            onClick={() => void handleCreatePage(null, "canvas")}
+          >
+            <span className="sidebar-action-row__icon">
+              <CanvasSvgIcon />
+            </span>
+            <span className="sidebar-action-row__label">새 캔버스</span>
           </button>
         </div>
 
@@ -4343,6 +4475,17 @@ export default function App() {
           </div>
         </div>
       )}
+      {isGraphOpen && (
+        <GraphView
+          currentPageId={activeTab?.pageId && activeTab.pageId !== HOME_PAGE_ID ? activeTab.pageId : undefined}
+          onClose={() => setIsGraphOpen(false)}
+          onSelectPage={(id) => {
+            setIsGraphOpen(false);
+            void handleSelectPage(id);
+          }}
+        />
+      )}
+
       {isSearchModalOpen && (
         <div
           className="search-modal-backdrop"
@@ -4410,7 +4553,7 @@ export default function App() {
                           openSearchItem(item, { newTab: event.metaKey || event.ctrlKey, split: event.altKey })
                         }
                       >
-                        <PageIconOrDoc icon={item.page.icon} />
+                        <PageIconOrDoc icon={item.page.icon} kind={item.page.kind} />
                         <span>{item.page.title || "제목 없는 문서"}</span>
                       </button>
                     </li>
@@ -4455,7 +4598,7 @@ export default function App() {
                             openSearchItem(item, { newTab: event.metaKey || event.ctrlKey, split: event.altKey })
                           }
                         >
-                          <PageIconOrDoc icon={pagesById.get(item.pageId)?.icon ?? item.result.pageIcon ?? undefined} />
+                          <PageIconOrDoc icon={pagesById.get(item.pageId)?.icon ?? item.result.pageIcon ?? undefined} kind={pagesById.get(item.pageId)?.kind} />
                           <SearchHitContent result={item.result} keywords={workspaceSearch.response?.keywords ?? []} />
                         </button>
                       </li>
@@ -4611,6 +4754,7 @@ export default function App() {
                     ) : (
                       <PageIconOrDoc
                         icon={pageMeta?.icon}
+                        kind={pageMeta?.kind}
                         hasChildren={Boolean(tab.pageId && (pagesByParent.get(tab.pageId)?.length ?? 0) > 0)}
                       />
                     )}
@@ -4807,7 +4951,7 @@ export default function App() {
                     </div>
 
                     <div className="topbar-right">
-                      {panePageId && panePageId !== HOME_PAGE_ID && (() => {
+                      {panePageId && panePageId !== HOME_PAGE_ID && pagesById.get(panePageId)?.kind !== "canvas" && (() => {
                         const panePageWidth = normalizePageWidthValue(
                           pagesById.get(panePageId)?.pageWidth,
                         );
@@ -4940,6 +5084,18 @@ export default function App() {
                           </ul>
                         </div>
                       </div>
+                    ) : pagesById.get(panePageId)?.kind === "canvas" ? (
+                      <CanvasPane
+                        key={`${paneTab.id}-${panePageId}`}
+                        pageId={panePageId}
+                        authSession={authSession}
+                        pages={pages}
+                        pagesById={pagesById}
+                        readOnly={isReadOnlyUser}
+                        onOpenPage={(id) => void handleSelectPage(id, { targetTabId: paneTab.id })}
+                        onCreatePage={handleCreatePageFromCanvas}
+                        onRename={(title) => handleRenamePageTitle(panePageId, title)}
+                      />
                     ) : paneDoc ? (
                       <WorkspacePagesContext.Provider value={paneContextValue}>
                         <CollectionActionsContext.Provider
@@ -4959,11 +5115,12 @@ export default function App() {
                             onSelectPage={(id) =>
                               void handleSelectPage(id, { targetTabId: paneTab.id })
                             }
-                            onInsertPageBlockAndOpen={(parentId, getUpdatedBlocks) =>
+                            onInsertPageBlockAndOpen={(parentId, getUpdatedBlocks, kind) =>
                               handleInsertPageBlockAndOpen(
                                 parentId,
                                 getUpdatedBlocks,
                                 paneTab.id,
+                                kind,
                               )
                             }
                             onSaveBlocks={scheduleSave}

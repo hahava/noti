@@ -32,8 +32,12 @@ export {
   type UserRole,
 } from "@noty/core/users";
 
+/** page: 일반 문서, canvas: 캔버스 (본문 대신 카드·연결선을 Yjs 로 저장) */
+export type PageKind = "page" | "canvas";
+
 export interface PageRow {
   id: string;
+  kind: PageKind;
   title: string;
   icon: string | null;
   pageWidth: string;
@@ -42,6 +46,15 @@ export interface PageRow {
   createdAt: string;
   updatedAt: string;
 }
+
+/** 페이지 구조상 허용되지 않는 요청 (API 는 400 으로 응답) */
+export class PageStructureError extends Error {}
+
+/**
+ * 캔버스는 페이지를 소유하지 않는다. 캔버스 아래에 페이지를 두면 하위 페이지 블록을 본문에 넣는
+ * 기존 동작이 캔버스 문서를 건드리게 되므로 막는다. (캔버스 자체는 어느 페이지 아래에든 둘 수 있다)
+ */
+export const CANVAS_PARENT_ERROR = "캔버스 아래에는 페이지를 둘 수 없습니다. 캔버스에는 페이지를 카드로 올려 주세요.";
 
 export function normalizePageWidth(raw: unknown): string {
   if (typeof raw !== "string") return "default";
@@ -309,6 +322,7 @@ async function appendPageBlockToParentInTx(
 function mapPageRow(row: Record<string, unknown>): PageRow {
   return {
     id: String(row.id),
+    kind: row.kind === "canvas" ? "canvas" : "page",
     title: String(row.title ?? "제목 없는 문서"),
     icon: row.icon ? String(row.icon) : null,
     pageWidth: normalizePageWidth(row.page_width),
@@ -428,6 +442,8 @@ export async function ensureSchema(): Promise<void> {
   await pool.query(
     "ALTER TABLE pages ADD COLUMN IF NOT EXISTS page_width VARCHAR(32) NOT NULL DEFAULT 'default'",
   );
+  // 페이지 종류 (page / canvas)
+  await pool.query("ALTER TABLE pages ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'page'");
 
   // 역할: admin(관리자) / editor(편집자) / viewer(읽기 전용).
   // 예전 'user' 역할은 편집자로 옮긴다. 역할은 어드민에서 관리하므로 서버 시작 때 덮어쓰지 않는다.
@@ -629,7 +645,7 @@ export async function listPagesFromDb(userId = "user-admin"): Promise<{
 }> {
   await ensureUserWorkspace(userId);
   const res = await pool.query(
-    `SELECT id, title, icon, page_width, parent_id, sort_order, created_at, updated_at
+    `SELECT id, kind, title, icon, page_width, parent_id, sort_order, created_at, updated_at
      FROM pages
      WHERE deleted_at IS NULL
      ORDER BY sort_order ASC, created_at ASC`,
@@ -647,15 +663,18 @@ export async function createPageInDb(
     parentId?: string | null;
     title?: string;
     insertIntoParentBlocks?: boolean;
+    kind?: PageKind;
   },
   userId = "user-admin",
 ): Promise<{ page: PageRow; pages: PageRow[] }> {
+  const kind: PageKind = options?.kind === "canvas" ? "canvas" : "page";
   const parentId =
     options?.parentId && options.parentId.trim() ? options.parentId.trim() : null;
-  const title = options?.title?.trim() || "제목 없는 문서";
+  const title = options?.title?.trim() || (kind === "canvas" ? "제목 없는 캔버스" : "제목 없는 문서");
   const id = `page-${randomUUID().slice(0, 8)}`;
 
-  const initialBlocks = [
+  // 캔버스는 본문 블록 대신 카드·연결선을 협업(Yjs) 문서에 저장한다.
+  const initialBlocks = kind === "canvas" ? [] : [
     {
       type: "heading",
       props: { level: 1 },
@@ -673,8 +692,9 @@ export async function createPageInDb(
     await client.query("BEGIN");
 
     if (parentId) {
-      const parent = await client.query("SELECT 1 FROM pages WHERE id = $1 AND deleted_at IS NULL", [parentId]);
+      const parent = await client.query("SELECT kind FROM pages WHERE id = $1 AND deleted_at IS NULL", [parentId]);
       if (!parent.rowCount) throw new Error("Parent page not found");
+      if (parent.rows[0].kind === "canvas") throw new PageStructureError(CANVAS_PARENT_ERROR);
     }
 
     const orderRes = await client.query(
@@ -686,10 +706,10 @@ export async function createPageInDb(
     const nextOrder = Number(orderRes.rows[0]?.next_order ?? 0);
 
     const insertRes = await client.query(
-      `INSERT INTO pages (id, user_id, title, parent_id, sort_order, blocks, plain_text)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-       RETURNING id, title, icon, page_width, parent_id, sort_order, created_at, updated_at`,
-      [id, userId, title, parentId, nextOrder, JSON.stringify(initialBlocks), title],
+      `INSERT INTO pages (id, user_id, title, parent_id, sort_order, blocks, plain_text, kind)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+       RETURNING id, kind, title, icon, page_width, parent_id, sort_order, created_at, updated_at`,
+      [id, userId, title, parentId, nextOrder, JSON.stringify(initialBlocks), title, kind],
     );
     page = mapPageRow(insertRes.rows[0]);
 
@@ -824,10 +844,11 @@ export async function updatePageInDb(
     if (nextParentId !== undefined) {
       if (nextParentId) {
         const liveParent = await client.query(
-          "SELECT 1 FROM pages WHERE id = $1 AND deleted_at IS NULL",
+          "SELECT kind FROM pages WHERE id = $1 AND deleted_at IS NULL",
           [nextParentId],
         );
         if (!liveParent.rowCount) throw new Error("Parent page not found");
+        if (liveParent.rows[0].kind === "canvas") throw new PageStructureError(CANVAS_PARENT_ERROR);
       }
       const cycle = await isDescendantInDb(nextParentId, id);
       if (!cycle) {

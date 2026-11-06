@@ -1,4 +1,5 @@
 import { pool } from "./db.js";
+import { decodeCanvasState, syncCanvasLinks } from "./graph.js";
 import { collectionExists, loadCollectionState, storeCollectionState } from "./collection-db.js";
 
 const PAGE_ROOM_PREFIX = "page:";
@@ -98,4 +99,11 @@ export async function storeCollaborationState(
            updated_at = NOW()`,
     [documentName, pageId, Buffer.from(state)],
   );
+  // 캔버스면 카드로 올린 페이지를 그래프 링크(캔버스 → 페이지)로 맞춘다.
+  const kind = await pool.query<{ kind: string }>("SELECT kind FROM pages WHERE id = $1", [pageId]);
+  if (kind.rows[0]?.kind === "canvas") {
+    await syncCanvasLinks(pageId, decodeCanvasState(state)).catch((error) =>
+      console.error(`[canvas] ${pageId} 링크 갱신 실패:`, error),
+    );
+  }
 }

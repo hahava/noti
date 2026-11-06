@@ -20,6 +20,7 @@
 
 @import "./styles/layout/sidebar.css";
 @import "./styles/components/overlay.css";
+@import "./styles/components/canvas-graph.css";
 @import "./styles/layout/workspace.css";
 @import "./styles/layout/ai-panel.css";
 

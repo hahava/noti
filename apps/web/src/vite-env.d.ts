@@ -268,6 +268,8 @@ export type AuthSession = {
 
 export type PageItem = {
   id: string;
+  /** page: 문서, canvas: 캔버스 (없으면 page) */
+  kind?: "page" | "canvas";
   title: string;
   icon?: string | null;
   pageWidth?: string | null;

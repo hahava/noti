@@ -165,6 +165,7 @@ async function staticChecks() {
 
 /* ------------------------------------------------------------------ 2. 실행 검사 */
 let mainToken = null;
+let canvasId = null;
 let firstPageId = null;
 
 async function runtimeChecks() {
@@ -177,6 +178,9 @@ async function runtimeChecks() {
     COLLAB_HOST: "127.0.0.1",
     COLLAB_PORT: String(PORTS.collab),
     COLLAB_MODE: "single",
+    // 캔버스 저장(→ 그래프 링크 갱신)을 빨리 확인하려고 저장 지연을 줄인다
+    COLLAB_STORE_DEBOUNCE_MS: "200",
+    COLLAB_STORE_MAX_DEBOUNCE_MS: "500",
     ADMIN_HOST: "127.0.0.1",
     ADMIN_PORT: String(PORTS.admin),
     NOTY_ADMIN_PASSWORD: ADMIN_PASSWORD,
@@ -269,6 +273,70 @@ async function runtimeChecks() {
 
   await check("실시간 협업 (/collab, 두 클라이언트)", () => collabSync(mainToken, firstPageId));
 
+  await check("캔버스 만들기 · 캔버스 아래 페이지 금지", async () => {
+    const created = await json(`${API}/api/pages`, { method: "POST", token: mainToken, body: { title: "검증 캔버스", kind: "canvas" } });
+    expect(created.status === 201 && created.data.page.kind === "canvas", `생성 ${created.status} ${created.data?.page?.kind}`);
+    canvasId = created.data.page.id;
+    const child = await json(`${API}/api/pages`, { method: "POST", token: mainToken, body: { title: "x", parentId: canvasId } });
+    expect(child.status === 400, `캔버스 아래 페이지 만들기 ${child.status}`);
+    const move = await json(`${API}/api/pages/${firstPageId}`, { method: "PATCH", token: mainToken, body: { targetId: canvasId, placement: "inside" } });
+    expect(move.status === 400, `캔버스 안으로 옮기기 ${move.status}`);
+  });
+
+  await check("캔버스 동시 편집 → 저장 → 미리보기·그래프 링크", async () => {
+    const connect = () => {
+      const doc = new Y.Doc();
+      const provider = new HocuspocusProvider({ url: `ws://127.0.0.1:${PORTS.api}/collab`, name: `page:${canvasId}`, document: doc, token: mainToken });
+      return { doc, provider, synced: new Promise((r) => provider.on("synced", r)) };
+    };
+    const a = connect();
+    const b = connect();
+    try {
+      await Promise.race([Promise.all([a.synced, b.synced]), new Promise((_, rej) => setTimeout(() => rej(new Error("동기화 시간 초과")), 10_000))]);
+      // packages/shared/src/canvas.ts 와 같은 구조로 카드·선을 쓴다
+      const card = (fields) => {
+        const map = new Y.Map();
+        for (const [k, v] of Object.entries(fields)) map.set(k, v);
+        return map;
+      };
+      const received = new Promise((r) => b.doc.getMap("canvas-edges").observe(() => r(b.doc.getMap("canvas-nodes").size)));
+      a.doc.transact(() => {
+        a.doc.getMap("canvas-nodes").set("n-page", card({ type: "page", pageId: firstPageId, x: 0, y: 0, width: 260, height: 150 }));
+        a.doc.getMap("canvas-nodes").set("n-text", card({ type: "text", text: "검증 메모", x: 320, y: 0, width: 220, height: 120 }));
+        a.doc.getMap("canvas-edges").set("e1", card({ fromNode: "n-page", toNode: "n-text", fromSide: "right", toSide: "left" }));
+      });
+      const count = await Promise.race([received, new Promise((_, rej) => setTimeout(() => rej(new Error("전달 시간 초과")), 5000))]);
+      expect(count === 2, `B 가 받은 카드 ${count}`);
+    } finally {
+      a.provider.destroy();
+      b.provider.destroy();
+    }
+    // 저장 → 서버가 캔버스를 읽어 미리보기와 그래프 링크를 만든다
+    let snapshot = null;
+    let linked = false;
+    for (let i = 0; i < 20 && !(snapshot && linked); i += 1) {
+      await new Promise((r) => setTimeout(r, 400));
+      snapshot = (await json(`${API}/api/pages/${canvasId}/canvas`, { token: mainToken })).data?.canvas ?? null;
+      const graph = await json(`${API}/api/graph`, { token: mainToken });
+      linked = graph.data.links.some((l) => (l.source === canvasId && l.target === firstPageId) || (l.source === firstPageId && l.target === canvasId));
+    }
+    expect(snapshot?.nodes?.length === 2 && snapshot.edges.length === 1, `미리보기 카드 ${snapshot?.nodes?.length}, 선 ${snapshot?.edges?.length}`);
+    expect(linked, "그래프에 캔버스 → 페이지 링크가 없음");
+    const previews = await json(`${API}/api/pages/previews?ids=${firstPageId}`, { token: mainToken });
+    expect(previews.data.previews[firstPageId]?.title === "검증 페이지", "카드 미리보기 제목");
+  });
+
+  await check("페이지 안 하위 캔버스 (본문에 미리보기 블록)", async () => {
+    const created = await json(`${API}/api/pages`, {
+      method: "POST",
+      token: mainToken,
+      body: { title: "하위 캔버스", parentId: firstPageId, kind: "canvas", insertIntoParentBlocks: true },
+    });
+    expect(created.status === 201, `생성 ${created.status}`);
+    const parent = await json(`${API}/api/pages/${firstPageId}/document`, { token: mainToken });
+    expect(JSON.stringify(parent.data).includes(created.data.page.id), "부모 본문에 캔버스 블록이 없음");
+  });
+
   let adminToken = null;
   await check("어드민 로그인·계정 만들기", async () => {
     const login = await json(`${ADMIN}/api/auth/login`, { method: "POST", body: { username: "admin", password: ADMIN_PASSWORD } });
@@ -333,11 +401,19 @@ const { applyRendererCsp } = require(${JSON.stringify(path.join(LAYOUT.desktopDi
 app.setPath("userData", ${JSON.stringify(path.join(dir, "profile"))});
 app.whenReady().then(async () => {
   applyRendererCsp(session.defaultSession);
-  const win = new BrowserWindow({ show: false });
+  const win = new BrowserWindow({ show: false, width: 1400, height: 900 });
+  const shotDir = ${JSON.stringify(process.env.VERIFY_SCREENSHOTS || "")};
+  const shot = async (name) => {
+    if (!shotDir) return;
+    const image = await win.webContents.capturePage();
+    require("node:fs").writeFileSync(require("node:path").join(shotDir, name + ".png"), image.toPNG());
+  };
   const cspViolations = [];
+  const flowWarnings = [];
   win.webContents.on("console-message", (...args) => {
     const message = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0].message : args[2];
     if (/Content Security Policy/i.test(String(message))) cspViolations.push(String(message).slice(0, 160));
+    if (/React Flow|xyflow|edge/i.test(String(message))) flowWarnings.push(String(message).slice(0, 200));
   });
   const index = ${JSON.stringify(path.join(LAYOUT.webDist, "index.html"))};
   await win.loadFile(index);
@@ -380,6 +456,72 @@ app.whenReady().then(async () => {
     if (blocks.opened && blocks.code && blocks.math && blocks.diagram) break;
   }
   result.blocks = blocks;
+
+  // 그래프 뷰: 사이드바 "그래프" → 점이 그려지는지, Esc 로 닫히는지
+  await win.webContents.executeJavaScript(\`[...document.querySelectorAll(".sidebar-action-row")].find((el) => el.textContent.includes("그래프"))?.click()\`);
+  let graph = {};
+  for (let i = 0; i < 20; i += 1) {
+    await new Promise((r) => setTimeout(r, 300));
+    graph = await win.webContents.executeJavaScript(\`({ nodes: document.querySelectorAll(".graph-node").length, links: document.querySelectorAll(".graph-link").length })\`);
+    if (graph.nodes >= 3 && graph.links >= 1) break;
+  }
+  await new Promise((r) => setTimeout(r, 1500)); // 배치가 자리 잡을 때까지
+  await shot("graph");
+  await win.webContents.executeJavaScript('window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))');
+  await new Promise((r) => setTimeout(r, 300));
+  graph.closed = await win.webContents.executeJavaScript('!document.querySelector(".graph-overlay")');
+  result.graph = graph;
+
+  // 캔버스: 사이드바에서 "검증 캔버스" 를 열면 카드 2장(페이지 카드 + 메모)과 선이 그려지는지
+  await win.webContents.executeJavaScript(\`(() => {
+    const target = [...document.querySelectorAll(".tree-item")].find((el) => el.textContent.includes("검증 캔버스"));
+    target?.click();
+  })()\`);
+  let canvas = {};
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((r) => setTimeout(r, 400));
+    canvas = await win.webContents.executeJavaScript(\`({
+      cards: document.querySelectorAll(".react-flow__node").length,
+      edges: document.querySelectorAll(".react-flow__edge").length,
+      pageCard: [...document.querySelectorAll(".canvas-card--page")].some((el) => el.textContent.includes("검증 페이지")),
+      memo: document.body.innerText.includes("검증 메모"),
+    })\`);
+    if (canvas.cards >= 2 && canvas.edges >= 1 && canvas.pageCard && canvas.memo) break;
+  }
+  result.canvas = { ...canvas, warnings: flowWarnings.slice(0, 3) };
+  // 도구 막대 "+ 새 페이지": 캔버스와 같은 위치(루트)에 페이지가 생기고 카드가 하나 늘어나는지
+  const before = canvas.cards || 0;
+  await win.webContents.executeJavaScript(\`[...document.querySelectorAll(".canvas-toolbar-btn")].find((el) => el.textContent.includes("새 페이지"))?.click()\`);
+  let created = {};
+  for (let i = 0; i < 25; i += 1) {
+    await new Promise((r) => setTimeout(r, 400));
+    created = await win.webContents.executeJavaScript(\`({
+      cards: document.querySelectorAll(".react-flow__node").length,
+      rootPages: [...document.querySelectorAll(".tree-item")].filter((el) => el.textContent.includes("제목 없는 문서")).length,
+    })\`);
+    if (created.cards > before && created.rootPages > 0) break;
+  }
+  result.canvas.newPage = created.cards > before && created.rootPages > 0;
+  await new Promise((r) => setTimeout(r, 800));
+  await shot("canvas");
+
+  // 페이지 안 캔버스 미리보기: "검증 페이지" 를 열면 본문에 하위 캔버스 미리보기 블록이 보이는지
+  await win.webContents.executeJavaScript(\`(() => {
+    const target = [...document.querySelectorAll(".tree-item")].find((el) => el.textContent.trim().startsWith("검증 페이지"));
+    target?.click();
+  })()\`);
+  let preview = {};
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((r) => setTimeout(r, 400));
+    preview = await win.webContents.executeJavaScript(\`({
+      block: !!document.querySelector(".bn-editor .canvas-preview"),
+      title: document.querySelector(".bn-editor .canvas-preview__header")?.textContent ?? "",
+    })\`);
+    if (preview.block && preview.title.includes("하위 캔버스")) break;
+  }
+  result.preview = preview;
+  await new Promise((r) => setTimeout(r, 600));
+  await shot("page-with-canvas");
   result.cspViolations = cspViolations;
   console.log("VERIFY_ELECTRON=" + JSON.stringify(result));
   app.exit(0);
@@ -393,7 +535,7 @@ app.whenReady().then(async () => {
     return;
   }
   const r = JSON.parse(line.slice("VERIFY_ELECTRON=".length));
-  const { blocks, cspViolations, ...base } = r;
+  const { blocks, cspViolations, graph: _graph, canvas: _canvas, preview: _preview, ...base } = r;
   record(
     "Electron (file://, CSP) → 서버",
     base.origin === "file://" && base.health === 200 && base.ws === "open" && base.pageListed && !base.login && !base.error,
@@ -404,6 +546,22 @@ app.whenReady().then(async () => {
     Boolean(blocks?.opened && blocks.code && blocks.math && blocks.diagram),
     JSON.stringify(blocks),
   );
+  record(
+    "Electron: 그래프 뷰 (점·선 표시, Esc 로 닫기)",
+    Boolean(r.graph && r.graph.nodes >= 3 && r.graph.links >= 1 && r.graph.closed),
+    JSON.stringify(r.graph),
+  );
+  record(
+    "Electron: 캔버스 열기 (페이지 카드·메모·선)",
+    Boolean(r.canvas && r.canvas.cards >= 2 && r.canvas.edges >= 1 && r.canvas.pageCard && r.canvas.memo),
+    JSON.stringify(r.canvas),
+  );
+  record(
+    "Electron: 페이지 안 캔버스 미리보기 블록",
+    Boolean(r.preview?.block && r.preview.title.includes("하위 캔버스")),
+    JSON.stringify(r.preview),
+  );
+  record("Electron: 캔버스에서 새 페이지 만들기 (캔버스와 같은 위치 + 카드)", Boolean(r.canvas?.newPage), "");
   record("Electron: CSP 위반 없음", cspViolations.length === 0, cspViolations.length ? cspViolations.join(" | ") : "");
   // 데스크톱 앱 본체(main 프로세스)가 빌드된 화면을 찾아 띄우는지. 임시 사용자 데이터 폴더로 실행한다.
   const userData = mkdtempSync(path.join(os.tmpdir(), "noty-verify-desktop-"));

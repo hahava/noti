@@ -17,6 +17,11 @@
     "@mantine/hooks": "^8.3.0",
     "@mantine/utils": "^6.0.22",
     "@noty/shared": "*",
+    "@xyflow/react": "12.12.0",
+    "d3-drag": "3.0.0",
+    "d3-force": "3.0.0",
+    "d3-selection": "3.0.0",
+    "d3-zoom": "3.0.0",
     "katex": "^0.18.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -24,6 +29,10 @@
     "yjs": "^13.6.33"
   },
   "devDependencies": {
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.12",
+    "@types/d3-zoom": "^3.0.9",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
