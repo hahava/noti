@@ -158,6 +158,8 @@ export interface SetupEnvironment {
   /** null = 확인 불가 (Docker Desktop 방식에서는 어드민이 호스트 포트를 볼 수 없다) */
   ports: Record<string, boolean | null>;
   networkMode: "host" | "bridge";
+  /** 비어 있는 포트로 고른 기본값 */
+  suggested: { apiPort: number; collabPort: number; dbPort: number };
   appImage: string;
   pending: boolean;
 }

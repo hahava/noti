@@ -653,6 +653,18 @@ async function bootstrap() {
   }
 
   attachCollaborationProxy(server);
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(
+        `\n[API Server] ${HOST}:${PORT} 포트를 이미 다른 프로그램이 쓰고 있어 시작하지 못했습니다.\n` +
+          "  - 설치 마법사로 설치한 Noty(Docker)가 같은 포트를 쓰고 있다면: docker stop noty-api noty-collab noty-admin noty-db\n" +
+          "  - 다른 개발 서버(npm run dev / dev:web:lan)가 이미 켜져 있다면 그쪽을 끄세요.\n" +
+          `  - 확인: lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n`,
+      );
+      process.exit(1);
+    }
+    throw error;
+  });
   server.listen(PORT, HOST, () => {
     console.log(`[API Server] Listening on http://${HOST}:${PORT}`);
   });

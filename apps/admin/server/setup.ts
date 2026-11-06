@@ -22,6 +22,7 @@ import {
   inspectContainer,
   pullImage,
   ensureNetwork,
+  listPublishedPorts,
   removeContainer,
   runContainer,
 } from "./docker.js";
@@ -117,6 +118,69 @@ function portFree(port: number, host = "127.0.0.1"): Promise<boolean> {
   });
 }
 
+/** 접속을 받아 주는 프로그램이 있으면 true (bridge 방식에서 호스트 포트 확인용) */
+function somethingListens(host: string, port: number, timeoutMs = 800): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (result: boolean) => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+/** 이 설치가 만든(다시 만들 예정인) 컨테이너가 쓰는 포트는 "사용 중"으로 치지 않는다. */
+async function ownPorts(): Promise<Set<number>> {
+  if (!dockerSocketPresent()) return new Set();
+  try {
+    const own = new Set<string>(Object.values(NAMES));
+    const containers = await listPublishedPorts();
+    return new Set(containers.filter((c) => c.managed && own.has(c.name)).flatMap((c) => c.ports));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * 이 컴퓨터(호스트)의 포트가 비어 있는지.
+ * host 방식은 직접 열어 보고, bridge 방식(Docker Desktop)은 host.docker.internal 로 접속해 본다.
+ */
+async function hostPortFree(port: number, own: Set<number>): Promise<boolean> {
+  if (own.has(port)) return true;
+  if (!isBridge()) return portFree(port);
+  return !(await somethingListens("host.docker.internal", port));
+}
+
+const PORT_CANDIDATES = {
+  api: [4000, 4100, 4200, 4300, 4400, 8080, 8090],
+  db: [5433, 5435, 5436, 5437, 15432],
+};
+
+/** 비어 있는 첫 후보. 협업 포트는 웹·API 포트 + 1 (host 방식에서만 호스트 포트를 쓴다) */
+async function suggestPorts(own: Set<number>) {
+  let apiPort = PORT_CANDIDATES.api[0];
+  for (const candidate of PORT_CANDIDATES.api) {
+    const collabFree = isBridge() || (await hostPortFree(candidate + 1, own));
+    if ((await hostPortFree(candidate, own)) && collabFree) {
+      apiPort = candidate;
+      break;
+    }
+  }
+  let dbPort = PORT_CANDIDATES.db[0];
+  if (!isBridge()) {
+    for (const candidate of PORT_CANDIDATES.db) {
+      if (await hostPortFree(candidate, own)) {
+        dbPort = candidate;
+        break;
+      }
+    }
+  }
+  return { apiPort, collabPort: apiPort + 1, dbPort };
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 5000): Promise<T> {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -144,11 +208,13 @@ export async function inspectEnvironment() {
     // 없음
   }
 
-  // bridge 방식에서는 어드민이 호스트 포트를 직접 볼 수 없다 (null = 확인 불가, 설치할 때 Docker 가 알려 준다).
+  // 쓰는 중인 포트를 알려 주고, 비어 있는 포트를 기본값으로 권한다.
+  const own = await ownPorts();
   const ports: Record<string, boolean | null> = {};
-  for (const port of [4000, 4001, 5433, 11434]) ports[port] = isBridge() ? null : await portFree(port);
+  for (const port of [4000, 4001, 5433, 11434]) ports[port] = await hostPortFree(port, own);
+  const suggested = await suggestPorts(own);
 
-  return { docker, ollama, ports, networkMode: NETWORK_MODE, appImage: APP_IMAGE, pending: Boolean(readInstallConfig()) };
+  return { docker, ollama, ports, suggested, networkMode: NETWORK_MODE, appImage: APP_IMAGE, pending: Boolean(readInstallConfig()) };
 }
 
 export async function testDatabaseUrl(url: string) {
@@ -271,6 +337,20 @@ export async function startInstall(plan: SetupPlan): Promise<SetupJob> {
     await dockerInfo().catch((error) => {
       throw new Error(explainDockerError(error));
     });
+  }
+  // 컨테이너를 만들기 전에, 이 컴퓨터에 열 포트가 비어 있는지 확인한다.
+  const own = await ownPorts();
+  const needed: [number, string][] = [];
+  if (plan.services.mode === "docker") {
+    needed.push([plan.services.apiPort, "웹·API"]);
+    if (!isBridge()) needed.push([plan.services.collabPort, "실시간 협업"]);
+  }
+  if (plan.database.mode === "docker" && !isBridge()) needed.push([plan.database.port, "DB"]);
+  if (plan.ollama.mode === "docker") needed.push([11434, "Ollama"]);
+  for (const [port, label] of needed) {
+    if (!(await hostPortFree(port, own))) {
+      throw new Error(`${label} 포트 ${port} 를 이미 다른 프로그램이 쓰고 있습니다. '접속 방법 → 고급 설정'에서 다른 포트를 고르세요.`);
+    }
   }
   const steps: SetupJob["steps"] = [
     { key: "database", label: plan.database.mode === "docker" ? "데이터베이스 만들기 (Docker)" : "데이터베이스 연결 확인", status: "pending" },

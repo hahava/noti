@@ -28,8 +28,20 @@ fi
 echo "[1/3] 이미지 빌드: $IMAGE"
 docker build -f deploy/Dockerfile --target app -t "$IMAGE" .
 
-echo "[2/3] 어드민 컨테이너 시작 (http://127.0.0.1:$PORT, 네트워크: $MODE)"
 docker rm -f noty-admin >/dev/null 2>&1 || true
+# 어드민 포트가 쓰는 중이면(예: 개발용 어드민) 다음 빈 포트를 고른다. NOTY_ADMIN_PORT 로 직접 정할 수도 있다.
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+if [[ -z "${NOTY_ADMIN_PORT:-}" ]]; then
+  for candidate in 4010 4011 4012 4013 4014 4015 4110 4210; do
+    if ! port_in_use "$candidate"; then PORT="$candidate"; break; fi
+  done
+elif port_in_use "$PORT"; then
+  echo "127.0.0.1:$PORT 포트를 이미 다른 프로그램이 쓰고 있습니다. NOTY_ADMIN_PORT 로 다른 포트를 정하세요." >&2
+  exit 1
+fi
+[[ "$PORT" != "4010" ]] && echo "      (4010 포트가 사용 중이라 $PORT 를 씁니다)"
+
+echo "[2/3] 어드민 컨테이너 시작 (http://127.0.0.1:$PORT, 네트워크: $MODE)"
 docker volume create noty_config >/dev/null
 COMMON=(
   --name noty-admin --restart unless-stopped

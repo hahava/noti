@@ -256,6 +256,16 @@ export async function runContainer(spec: ContainerSpec): Promise<void> {
   if (status >= 400) throw new DockerError(startBody.toString("utf8"), status);
 }
 
+/** 실행 중인 컨테이너와 호스트에 공개한 포트 */
+export async function listPublishedPorts(): Promise<{ name: string; managed: boolean; ports: number[] }[]> {
+  const list = await json<{ Names?: string[]; Labels?: Record<string, string>; Ports?: { PublicPort?: number }[] }[]>("/containers/json");
+  return list.map((c) => ({
+    name: (c.Names?.[0] ?? "").replace(/^\//, ""),
+    managed: c.Labels?.[MANAGED_LABEL] === "true",
+    ports: [...new Set((c.Ports ?? []).map((p) => p.PublicPort).filter((p): p is number => typeof p === "number"))],
+  }));
+}
+
 export async function ensureNetwork(name: string): Promise<void> {
   const { status } = await request(`/networks/${encodeURIComponent(name)}`);
   if (status === 200) return;

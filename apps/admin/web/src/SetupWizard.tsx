@@ -111,6 +111,10 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
   // 환경 확인 결과로 기본값을 고른다.
   const applyEnvironment = (result: SetupEnvironment) => {
     setEnv(result);
+    // 쓰는 중인 포트를 피해 고른 기본값 (예: 개발 서버가 4000 을 쓰고 있으면 4100)
+    setApiPort(result.suggested.apiPort);
+    setCollabPort(result.suggested.collabPort);
+    setDbPort(result.suggested.dbPort);
     if (!result.docker.available) {
       setDbMode("external");
       setServicesMode("manual");
@@ -261,7 +265,7 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
         {env.networkMode === "bridge" && (
           <p className="muted small">
             Docker Desktop 방식으로 설치합니다. 이 컴퓨터의 127.0.0.1 주소(예: Ollama)를 적으면 컨테이너에서 닿는 주소로 자동으로 바꿔 연결합니다.
-            포트가 겹치면 설치 단계에서 알려 줍니다.
+            포트는 이 컴퓨터에 접속해 보는 방식으로 확인합니다.
           </p>
         )}
         {env.pending && <div className="alert alert--warn">이전에 끝나지 않은 설치가 있습니다. 같은 비밀값으로 이어서 진행합니다.</div>}
@@ -413,7 +417,12 @@ export function SetupWizard({ initialJob, onFinished }: { initialJob: SetupJob |
           </label>
         )}
 
-        <details className="advanced">
+        {env && env.suggested.apiPort !== 4000 && (
+          <p className="muted small">
+            기본 포트 4000 을 이 컴퓨터의 다른 프로그램이 쓰고 있어 <strong>{env.suggested.apiPort}</strong> 번으로 골랐습니다. 고급 설정에서 바꿀 수 있습니다.
+          </p>
+        )}
+        <details className="advanced" open={Boolean(env && env.suggested.apiPort !== apiPort)}>
           <summary>고급 설정 (실행 방식·포트)</summary>
           <div className="stack">
             <Choice checked={servicesMode === "docker"} onSelect={() => setServicesMode("docker")} title="이 서버에 Docker 로 실행 (추천)" disabled={!docker}>
