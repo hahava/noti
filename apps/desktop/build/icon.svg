@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 파비콘(apps/web/public/favicon.svg)과 같은 모양. 앱 아이콘 규격(1024 캔버스, 824 크기 + 여백)에 맞췄다. -->
+  <g transform="translate(100 100) scale(12.875)">
+    <rect width="64" height="64" rx="14" fill="#191918"/>
+    <path fill="#fff" d="M17 15h8.2l13.6 21.4V15H47v34h-8.2L25.2 27.6V49H17z"/>
+  </g>
+</svg>

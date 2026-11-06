@@ -18,6 +18,7 @@
       "preload.cjs",
       "csp.cjs",
       "LICENSE",
+      "build/icon.png",
       "renderer/**/*",
       "!node_modules/**/*"
     ],
@@ -41,6 +42,7 @@
       ],
       "category": "Office"
     },
-    "copyright": "Copyright © Noty contributors · GPL-3.0"
+    "copyright": "Copyright © Noty contributors · GPL-3.0",
+    "icon": "build/icon.png"
   }
 }

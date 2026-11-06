@@ -18,6 +18,9 @@ app.setPath(
   process.env.NOTY_DESKTOP_USER_DATA || path.join(app.getPath("appData"), app.isPackaged ? "Noty" : "notion-like"),
 );
 
+/** 앱 아이콘 (파비콘과 같은 모양). 배포판 아이콘은 electron-builder 가 build/icon.png 로 만든다. */
+const APP_ICON = path.join(__dirname, "build", "icon.png");
+
 /** 빌드된 웹 화면: 저장소에서 실행하면 apps/web/dist, 배포판에서는 함께 묶은 renderer/ */
 function resolveRendererIndex() {
   const candidates = [
@@ -328,6 +331,8 @@ async function saveAttachment(_event, attachment) {
 
 function createWindow() {
   const window = new BrowserWindow({
+    // Windows·Linux 창 아이콘 (macOS 는 앱 번들 아이콘을 쓴다)
+    icon: existsSync(APP_ICON) ? APP_ICON : undefined,
     width: 1200,
     height: 820,
     minWidth: 480,
@@ -380,6 +385,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
   applyRendererCsp(session.defaultSession);
+  // 개발 실행(electron apps/desktop)에서도 Dock 에 Electron 기본 아이콘 대신 Noty 아이콘을 보인다.
+  if (process.platform === "darwin" && !app.isPackaged && existsSync(APP_ICON)) app.dock?.setIcon(APP_ICON);
   protocol.handle("app-asset", (request) => {
     const url = new URL(request.url);
     if (url.hostname !== "attachments") return new Response("Not found", { status: 404 });
