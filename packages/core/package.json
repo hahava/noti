@@ -1,6 +1,6 @@
 {
   "name": "@noty/core",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Noty 메인 API·협업 서버·어드민 서버가 함께 쓰는 공유 모듈 (DB, 설정, 사용자, 모델, 인덱싱 상태)",
   "license": "GPL-3.0-only",
