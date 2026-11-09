@@ -1,6 +1,6 @@
 {
   "name": "@noty/web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Noty 웹 화면 (React + BlockNote). Electron 앱과 운영 서버가 빌드 결과(dist)를 그대로 쓴다.",
   "license": "GPL-3.0-only",
