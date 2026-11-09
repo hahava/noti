@@ -260,6 +260,13 @@ export type SystemStatus = {
   serverPort: number | string;
 };
 
+/** 페이지 기록 한 건 (apps/server/db.ts listPageVersionsFromDb) */
+export type PageVersionSummary = {
+  id: string;
+  title: string;
+  editedAt: string;
+};
+
 export type AuthSession = {
   serverHost: string;
   token: string;
@@ -321,8 +328,16 @@ export type SavedAttachment = {
 };
 
 declare global {
+  /** Electron preload 가 여는 기능 (apps/desktop/preload.cjs). 웹 브라우저에서는 없다. */
+  interface DesktopBridge {
+    openServer?: (serverHost: string, session: AuthSession) => Promise<boolean>;
+    takePendingSession?: () => AuthSession | null;
+    leaveServer?: () => Promise<void>;
+    [key: string]: unknown;
+  }
+
   interface Window {
-    desktop?: Record<string, unknown>;
+    desktop?: DesktopBridge;
   }
 }
 

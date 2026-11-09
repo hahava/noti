@@ -181,6 +181,7 @@ async function runtimeChecks() {
     // 캔버스 저장(→ 그래프 링크 갱신)을 빨리 확인하려고 저장 지연을 줄인다
     COLLAB_STORE_DEBOUNCE_MS: "200",
     COLLAB_STORE_MAX_DEBOUNCE_MS: "500",
+    PAGE_VERSION_INTERVAL_MS: "300",
     ADMIN_HOST: "127.0.0.1",
     ADMIN_PORT: String(PORTS.admin),
     NOTY_ADMIN_PASSWORD: ADMIN_PASSWORD,
@@ -230,6 +231,32 @@ async function runtimeChecks() {
     const parent = await json(`${API}/api/pages/${firstPageId}/document`, { token: mainToken });
     const childId = child.data.page?.id ?? child.data.id;
     expect(JSON.stringify(parent.data).includes(childId), "부모 본문에 하위 페이지가 없음");
+  });
+
+  await check("페이지 기록: 저장 시 이전 본문 기록 · 되돌리기 (하위 페이지 유지)", async () => {
+    const text = (t) => [{ type: "paragraph", content: [{ type: "text", text: t, styles: {} }] }];
+    const created = await json(`${API}/api/pages`, { method: "POST", token: mainToken, body: { title: "기록 확인" } });
+    const id = created.data.page?.id ?? created.data.id;
+    const save = (t) => json(`${API}/api/pages/${id}/document`, { method: "PUT", token: mainToken, body: { blocks: text(t), title: "기록 확인" } });
+    await save("첫 내용");
+    await save("첫 내용 고침"); // 간격 안: 기록이 늘지 않는다
+    await new Promise((r) => setTimeout(r, 400)); // PAGE_VERSION_INTERVAL_MS 보다 길게
+    const child = await json(`${API}/api/pages`, { method: "POST", token: mainToken, body: { title: "나중에 만든 하위", parentId: id, insertIntoParentBlocks: true } });
+    const childId = child.data.page?.id ?? child.data.id;
+    await save("둘째 내용");
+    const list = await json(`${API}/api/pages/${id}/versions`, { token: mainToken });
+    expect(list.data.versions?.length === 2, `기록 수 ${list.data.versions?.length}`);
+    const latest = await json(`${API}/api/pages/${id}/versions/${list.data.versions[0].id}`, { token: mainToken });
+    expect(JSON.stringify(latest.data.version.blocks).includes("첫 내용 고침"), "최근 기록이 직전 본문이 아님");
+    // 가장 오래된 기록(처음 만든 본문)에는 하위 페이지가 없다 → 되돌릴 본문에 지금 하위 페이지가 들어 있어야 한다
+    const restored = await json(`${API}/api/pages/${id}/versions/${list.data.versions[1].id}/restore`, { method: "POST", token: mainToken });
+    const restoredJson = JSON.stringify(restored.data.blocks);
+    expect(!restoredJson.includes("첫 내용") && restoredJson.includes(childId), "되돌릴 본문이 옛 본문이 아니거나 지금 하위 페이지가 빠짐");
+    const after = await json(`${API}/api/pages/${id}/versions`, { token: mainToken });
+    const snap = await json(`${API}/api/pages/${id}/versions/${after.data.versions[0].id}`, { token: mainToken });
+    expect(after.data.versions.length === 3 && JSON.stringify(snap.data.version.blocks).includes("둘째 내용"), "되돌리기 전 본문이 기록되지 않음");
+    const other = await json(`${API}/api/pages/${firstPageId}/versions/${list.data.versions[0].id}`, { token: mainToken });
+    expect(other.status === 404, `다른 페이지의 기록 조회 ${other.status}`);
   });
 
   await check("첨부 파일: 업로드·권한·서명 주소", async () => {
@@ -522,6 +549,41 @@ app.whenReady().then(async () => {
   result.preview = preview;
   await new Promise((r) => setTimeout(r, 600));
   await shot("page-with-canvas");
+  // 페이지 기록: "기록 확인" 페이지(실행 검사에서 만든 것)를 열고, 상단바 기록 → 가장 오래된 기록으로 되돌리기
+  await win.webContents.executeJavaScript(\`[...document.querySelectorAll(".tree-item")].find((el) => el.textContent.trim().startsWith("기록 확인"))?.click()\`);
+  const waitFor = async (expr, tries = 30) => {
+    for (let i = 0; i < tries; i += 1) {
+      if (await win.webContents.executeJavaScript(expr)) return true;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return false;
+  };
+  const history = {};
+  const rendererErrors = [];
+  win.webContents.on("console-message", (...args) => {
+    const details = typeof args[0] === "object" && args[0] && "message" in args[0] ? args[0] : { level: args[1], message: args[2] };
+    if (details.level === "error" || details.level === 3) rendererErrors.push(String(details.message).slice(0, 200));
+  });
+  try {
+    history.opened = await waitFor('(document.querySelector(".bn-editor")?.innerText || "").includes("둘째 내용")');
+    await win.webContents.executeJavaScript('[...document.querySelectorAll(".topbar-action-btn")].find((b) => b.getAttribute("aria-label") === "페이지 기록")?.click()');
+    history.listed = await waitFor('document.querySelectorAll(".page-history__item").length >= 3');
+    await win.webContents.executeJavaScript('[...document.querySelectorAll(".page-history__item")].at(-1)?.click()');
+    await waitFor('!!document.querySelector(".page-history__footer .ds-btn:not([disabled])")');
+    await shot("page-history");
+    await win.webContents.executeJavaScript('document.querySelector(".page-history__footer .ds-btn")?.click()');
+    await waitFor('!!document.querySelector(".page-history__footer .ds-btn--danger")');
+    await win.webContents.executeJavaScript('document.querySelector(".page-history__footer .ds-btn")?.click()');
+    history.restored = await waitFor('!document.querySelector(".page-history") && !(document.querySelector(".bn-editor")?.innerText || "").includes("둘째 내용")');
+    history.childBlockKept = await win.webContents.executeJavaScript('(document.querySelector(".bn-editor")?.innerText || "").includes("나중에 만든 하위")');
+    await new Promise((r) => setTimeout(r, 2000)); // 자동 저장 · 휴지통 판단이 끝날 때까지
+    history.childAlive = await win.webContents.executeJavaScript(\`fetch(${JSON.stringify(`${API}/api/pages`)}, { headers: { Authorization: "Bearer ${mainToken}" } })
+      .then((r) => r.json()).then((d) => d.pages.some((p) => p.title === "나중에 만든 하위"))\`);
+  } catch (error) {
+    history.error = [String(error?.message || error).slice(0, 120), ...rendererErrors.slice(-2)].join(" | ");
+  }
+  result.history = history;
+
   result.cspViolations = cspViolations;
   console.log("VERIFY_ELECTRON=" + JSON.stringify(result));
   app.exit(0);
@@ -535,7 +597,7 @@ app.whenReady().then(async () => {
     return;
   }
   const r = JSON.parse(line.slice("VERIFY_ELECTRON=".length));
-  const { blocks, cspViolations, graph: _graph, canvas: _canvas, preview: _preview, ...base } = r;
+  const { blocks, cspViolations, graph: _graph, canvas: _canvas, preview: _preview, history: _history, ...base } = r;
   record(
     "Electron (file://, CSP) → 서버",
     base.origin === "file://" && base.health === 200 && base.ws === "open" && base.pageListed && !base.login && !base.error,
@@ -562,6 +624,11 @@ app.whenReady().then(async () => {
     JSON.stringify(r.preview),
   );
   record("Electron: 캔버스에서 새 페이지 만들기 (캔버스와 같은 위치 + 카드)", Boolean(r.canvas?.newPage), "");
+  record(
+    "Electron: 페이지 기록 → 되돌리기 (본문 교체, 하위 페이지 유지)",
+    Boolean(r.history && !r.history.error && ["opened", "listed", "restored", "childBlockKept", "childAlive"].every((k) => r.history[k] === true)),
+    JSON.stringify(r.history),
+  );
   record("Electron: CSP 위반 없음", cspViolations.length === 0, cspViolations.length ? cspViolations.join(" | ") : "");
   // 데스크톱 앱 본체(main 프로세스)가 빌드된 화면을 찾아 띄우는지. 임시 사용자 데이터 폴더로 실행한다.
   const userData = mkdtempSync(path.join(os.tmpdir(), "noty-verify-desktop-"));

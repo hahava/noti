@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -39,6 +40,10 @@ import {
   withMultiColumn,
 } from "@blocknote/xl-multi-column";
 import { BlockNoteView } from "@blocknote/mantine";
+import { PageHistoryModal, PreviewBlocks } from "./PageHistory";
+import { TemplatePanel, TemplateSaveDialog, TemplateSvgIcon } from "./TemplatePanel";
+import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, type PageTemplate } from "./templates";
+import type { UserTemplateRecord } from "./api";
 import {
   createReactBlockSpec,
   createReactInlineContentSpec,
@@ -351,6 +356,15 @@ function CollectionSvgIcon() {
   );
 }
 
+function HistorySvgIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.75v2.5H5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 5.25V8l2 1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function PageWidthSvgIcon({ isFull = false }: { isFull?: boolean }) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -575,6 +589,13 @@ function extractInlineText(content: unknown): string {
       return "";
     })
     .join("");
+}
+
+/** 제목(첫 블록) 아래가 비어 있는지: 빈 문단만 있으면 비어 있다고 본다 */
+function isDocumentBodyEmpty(blocks: readonly any[]): boolean {
+  return blocks
+    .slice(1)
+    .every((block) => block?.type === "paragraph" && !extractInlineText(block.content).trim() && !block.children?.length);
 }
 
 function extractDocumentTitle(blocks: readonly unknown[]): string | undefined {
@@ -1150,6 +1171,9 @@ function sameStringArray(a: readonly string[], b: readonly string[]): boolean {
 
 interface EditorPaneProps {
   authSession: AuthSession;
+  /** 페이지 기록 창을 이 창에서 열지 */
+  isHistoryOpen: boolean;
+  onCloseHistory: () => void;
   pageId: string;
   pageWidth?: string | null;
   pages: PageItem[];
@@ -1168,10 +1192,17 @@ interface EditorPaneProps {
   onTrashPageBlocks: (parentId: string, childIds: string[], blocks: readonly unknown[], title?: string) => Promise<void>;
   onOpenOrCreateCollectionRowPage: CollectionActionsContextValue["onOpenOrCreateRowPage"];
   onSyncPageWidthFromYjs?: (pageId: string, pageWidth: string) => void;
+  /** 템플릿 패널에서 마우스를 올린 템플릿 — 본문 아래에 반투명하게 미리 보여 준다 */
+  templatePreview?: PageTemplate | null;
+  /** nonce 가 바뀔 때마다 이 템플릿을 본문에 적용한다 */
+  templateApplyRequest?: { template: PageTemplate; nonce: number } | null;
+  onOpenTemplates?: () => void;
 }
 
 function EditorPane({
   authSession,
+  isHistoryOpen,
+  onCloseHistory,
   pageId,
   pageWidth,
   pages,
@@ -1186,6 +1217,9 @@ function EditorPane({
   onTrashPageBlocks,
   onOpenOrCreateCollectionRowPage,
   onSyncPageWidthFromYjs,
+  templatePreview,
+  templateApplyRequest,
+  onOpenTemplates,
 }: EditorPaneProps) {
   // 읽기 전용 계정: 보기만 한다 (편집·구조 보정·저장을 하지 않음. 서버도 같은 기준으로 막는다).
   const readOnly = authSession.user.role === "viewer";
@@ -1360,6 +1394,48 @@ function EditorPane({
       authSession.user.displayName,
     ],
   ) as any;
+
+  const [isBodyEmpty, setIsBodyEmpty] = useState(() => isDocumentBodyEmpty(editor.document));
+  const [appliedTemplate, setAppliedTemplate] = useState<string | null>(null);
+  useEffect(() => {
+    if (!appliedTemplate) return;
+    const timer = window.setTimeout(() => setAppliedTemplate(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [appliedTemplate]);
+
+  // 템플릿 적용: 본문이 비었으면 제목 아래를 통째로 채우고, 아니면 커서 블록 뒤에 끼워 넣는다.
+  // 편집기 API 로 바꾸므로 실시간 협업·저장·실행 취소가 평소처럼 이어진다.
+  const lastTemplateNonceRef = useRef(templateApplyRequest?.nonce);
+  useEffect(() => {
+    if (!templateApplyRequest || templateApplyRequest.nonce === lastTemplateNonceRef.current || readOnly) return;
+    lastTemplateNonceRef.current = templateApplyRequest.nonce;
+    const { template } = templateApplyRequest;
+    const blocks = template.blocks as any[];
+    const doc = editor.document;
+    const [first, ...rest] = doc;
+    editor.transact(() => {
+      if (!first) {
+        editor.replaceBlocks(doc, [{ type: "heading", props: { level: 1 }, content: template.name }, ...blocks]);
+        return;
+      }
+      if (Array.isArray(first.content) && !extractInlineText(first.content).trim()) {
+        editor.updateBlock(first, { content: template.name });
+      }
+      if (isDocumentBodyEmpty(doc)) {
+        if (rest.length > 0) editor.replaceBlocks(rest, blocks);
+        else editor.insertBlocks(blocks, first, "after");
+        return;
+      }
+      let anchor = doc[doc.length - 1];
+      try {
+        anchor = editor.getTextCursorPosition().block;
+      } catch {
+        // 커서가 없으면 문서 끝에 붙인다
+      }
+      editor.insertBlocks(blocks, anchor, "after");
+    });
+    setAppliedTemplate(template.name);
+  }, [templateApplyRequest]);
 
   const isEditorReady = () =>
     editor.document.length > 0 && (!collaborationProvider || collaborationProvider.synced);
@@ -1708,10 +1784,14 @@ function EditorPane({
           읽기 전용 계정입니다. 페이지를 보고 AI에게 질문할 수 있지만, 수정·이동·삭제는 할 수 없습니다.
         </div>
       )}
+      {isHistoryOpen && (
+        <PageHistoryModal pageId={pageId} editor={editor} readOnly={readOnly} onClose={onCloseHistory} />
+      )}
       <BlockNoteView
         editor={editor}
         editable={!readOnly}
         onChange={(_currentEditor: any, context: any) => {
+          setIsBodyEmpty(isDocumentBodyEmpty(editor.document));
           if (suppressOnChangeRef.current || readOnly) return;
           // 구조 보정(reconcile) 도중 발생한 변경은 저장만 하고 다시 보정하지 않는다.
           if (!reconcilingRef.current) {
@@ -1812,6 +1892,38 @@ function EditorPane({
           getItems={async (query) => getPageMentionItems(query)}
         />
       </BlockNoteView>
+      {templatePreview ? (
+        <div className="template-ghost" aria-hidden="true">
+          <div className="template-ghost__label">
+            {templatePreview.icon} {templatePreview.name} 미리보기 · 누르면{" "}
+            {isBodyEmpty ? "이 페이지에 적용" : "커서 위치에 삽입"}
+          </div>
+          <PreviewBlocks blocks={templatePreview.blocks as any[]} />
+        </div>
+      ) : (
+        isBodyEmpty &&
+        !readOnly &&
+        onOpenTemplates && (
+          <button type="button" className="template-start-hint" onClick={onOpenTemplates}>
+            <TemplateSvgIcon />
+            템플릿에서 시작
+          </button>
+        )
+      )}
+      {appliedTemplate && (
+        <div className="template-toast" role="status">
+          <span>“{appliedTemplate}” 템플릿을 적용했어요</span>
+          <button
+            type="button"
+            onClick={() => {
+              editor.undo();
+              setAppliedTemplate(null);
+            }}
+          >
+            실행 취소
+          </button>
+        </div>
+      )}
       </div>
     </section>
     </CollectionActionsContext.Provider>
@@ -2270,6 +2382,70 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   // 우측 AI 어시스턴트 패널 (⌘J)
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+  // 우측 템플릿 패널 (AI 패널과 같은 자리라 하나만 연다)
+  const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
+  const [templatePreview, setTemplatePreview] = useState<PageTemplate | null>(null);
+  const [templateApplyRequest, setTemplateApplyRequest] = useState<{ template: PageTemplate; nonce: number } | null>(null);
+  useEffect(() => {
+    if (isAIPanelOpen) setIsTemplatePanelOpen(false);
+  }, [isAIPanelOpen]);
+  useEffect(() => {
+    if (!isTemplatePanelOpen) setTemplatePreview(null);
+  }, [isTemplatePanelOpen]);
+  const openTemplatePanel = () => {
+    setIsAIPanelOpen(false);
+    setIsTemplatePanelOpen(true);
+  };
+  const [userTemplates, setUserTemplates] = useState<PageTemplate[]>([]);
+  const toPageTemplate = (record: UserTemplateRecord): PageTemplate => ({ ...record, category: USER_TEMPLATE_CATEGORY });
+  // 로그인하면 내 템플릿을 불러온다. 서버 저장 전에 이 브라우저에 저장해 둔 템플릿이 있으면 한 번 서버로 옮긴다.
+  useEffect(() => {
+    setUserTemplates([]);
+    if (!authSession) return;
+    let cancelled = false;
+    (async () => {
+      const legacy = isReadOnlyUser ? [] : takeLegacyUserTemplates();
+      if (legacy.length > 0) {
+        // 오래된 것부터 올려야 목록(최신순)이 예전 순서와 같다
+        for (const t of [...legacy].reverse()) {
+          await workspaceApi.createTemplate({ name: t.name, icon: t.icon, description: t.description ?? "", blocks: t.blocks });
+        }
+        clearLegacyUserTemplates();
+      }
+      const { templates } = await workspaceApi.listTemplates();
+      if (!cancelled) setUserTemplates(templates.map(toPageTemplate));
+    })().catch((error) => console.error("Failed to load templates", error));
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.token, authSession?.serverHost]);
+  // 템플릿 저장 창: 새로 저장 / 덮어쓰기는 페이지 본문(blocks)을, 이름 바꾸기는 기존 템플릿만 들고 연다.
+  const [templateDialog, setTemplateDialog] = useState<{
+    template?: PageTemplate;
+    blocks?: unknown[];
+    initial: { name: string; icon: string; description: string };
+  } | null>(null);
+  /** 열린 편집기의 미저장 변경까지 저장한 뒤 서버의 최신 본문을 읽는다 */
+  const loadBlocksForTemplate = async (pageId: string): Promise<unknown[]> => {
+    await flushAllPendingSaves();
+    const { blocks } = await workspaceApi.loadDocument(pageId);
+    return blocks ?? [];
+  };
+  const openSaveTemplateDialog = async (pageId: string, template?: PageTemplate) => {
+    try {
+      const blocks = await loadBlocksForTemplate(pageId);
+      const page = pagesById.get(pageId);
+      setTemplateDialog({
+        template,
+        blocks,
+        initial: template
+          ? { name: template.name, icon: template.icon, description: template.description }
+          : { name: page?.title || "새 템플릿", icon: page?.icon || "📄", description: "" },
+      });
+    } catch (error) {
+      console.error("Failed to read page for template", error);
+    }
+  };
   const [aiConceptRequest, setAIConceptRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [aiStatusVersion, setAIStatusVersion] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
@@ -2288,6 +2464,9 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [emojiPicker, setEmojiPicker] = useState<EmojiPickerState | null>(null);
   const [pageWidthMenu, setPageWidthMenu] = useState<PageWidthMenuState | null>(null);
+  // 페이지 기록 창을 연 분할 창(탭) id
+  const [historyTabId, setHistoryTabId] = useState<string | null>(null);
+  const closeHistory = useCallback(() => setHistoryTabId(null), []);
   const [customEmojiInput, setCustomEmojiInput] = useState<string>("");
 
   // 사이드바 다중 선택 및 일괄 삭제 상태
@@ -2434,6 +2613,15 @@ export default function App() {
         username: cleanUser,
         password: loginPassword,
       });
+      // 데스크톱 앱의 로그인 화면(앱에 묶인 file://)이면, 서버가 제공하는 최신 웹 화면으로 옮겨 간다.
+      if (window.location.protocol === "file:" && window.desktop?.openServer) {
+        const moved = await window.desktop.openServer(session.serverHost, session).catch(() => false);
+        if (moved) {
+          // 세션은 서버 화면으로 넘겼다. 여기(file://)에 남기면 로그아웃 후 돌아왔을 때 옛 세션으로 열린다.
+          clearAuthSession(true);
+          return;
+        }
+      }
       setLoginServerHost(session.serverHost);
       setLoginPassword("");
       setPages([]);
@@ -2461,6 +2649,8 @@ export default function App() {
       // ignore flush error during logout
     }
     await workspaceApi.logout();
+    // 데스크톱 앱의 서버 화면이면 앱에 묶인 로그인 화면으로 돌아간다 (그 밖에서는 아무 일도 하지 않음).
+    await window.desktop?.leaveServer?.().catch(() => undefined);
     setIsSettingsModalOpen(false);
     setIsSearchModalOpen(false);
     setContextMenu(null);
@@ -2506,12 +2696,6 @@ export default function App() {
           return;
         }
 
-        const parentsToExpand = new Set<string>();
-        for (const page of loadedPages) {
-          if (page.parentId) parentsToExpand.add(page.parentId);
-        }
-        setExpandedIds(parentsToExpand);
-
         const validMap = new Map(loadedPages.map((p) => [p.id, p]));
         const fallbackCandidate =
           loadedPages.find((item) => item.id === initialActiveId) || loadedPages[0];
@@ -2525,6 +2709,8 @@ export default function App() {
         if (storedLastPage) {
           setLastActivePageId(storedLastPage);
         }
+        // 사이드바는 접힌 채로 시작하고, 마지막으로 보던 페이지까지의 경로만 펼친다.
+        setExpandedIds(new Set(storedLastPage ? collectAncestorPageIds(storedLastPage, validMap) : []));
 
         let initialTabs: WorkspaceTabItem[];
         let initialActiveTabId: string;
@@ -4172,6 +4358,19 @@ export default function App() {
           >
             <span>우측 분할 화면으로 열기</span>
           </button>
+          {!isReadOnlyUser && contextMenu.page.kind !== "canvas" && (
+            <button
+              type="button"
+              className="noty-menu-item"
+              onClick={() => {
+                const targetId = contextMenu.page.id;
+                setContextMenu(null);
+                void openSaveTemplateDialog(targetId);
+              }}
+            >
+              <span>템플릿으로 저장</span>
+            </button>
+          )}
           <button
             type="button"
             className="noty-menu-item"
@@ -4982,6 +5181,38 @@ export default function App() {
                           </button>
                         );
                       })()}
+                      {panePageId && panePageId !== HOME_PAGE_ID && pagesById.get(panePageId)?.kind !== "canvas" && (
+                        <button
+                          type="button"
+                          className={`ds-btn ds-btn--ghost ds-btn--icon topbar-action-btn ${historyTabId === paneTab.id ? "topbar-action-btn--active" : ""}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setActiveTabId(paneTab.id);
+                            setHistoryTabId(paneTab.id);
+                          }}
+                          title="페이지 기록"
+                          aria-label="페이지 기록"
+                        >
+                          <HistorySvgIcon />
+                        </button>
+                      )}
+                      {panePageId && panePageId !== HOME_PAGE_ID && pagesById.get(panePageId)?.kind !== "canvas" && !isReadOnlyUser && (
+                        <button
+                          type="button"
+                          className={`ds-btn ds-btn--ghost ds-btn--icon topbar-action-btn ${isTemplatePanelOpen ? "topbar-action-btn--active" : ""}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setActiveTabId(paneTab.id);
+                            if (isTemplatePanelOpen) setIsTemplatePanelOpen(false);
+                            else openTemplatePanel();
+                          }}
+                          title={isTemplatePanelOpen ? "템플릿 닫기" : "템플릿"}
+                          aria-label="템플릿"
+                          aria-pressed={isTemplatePanelOpen}
+                        >
+                          <TemplateSvgIcon />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`ds-btn ds-btn--ghost ds-btn--icon topbar-action-btn ${isAIPanelOpen ? "topbar-action-btn--active" : ""}`}
@@ -5107,6 +5338,8 @@ export default function App() {
                           <EditorPane
                             key={`${paneTab.id}-${paneDoc.pageId}-${paneDoc.revision}`}
                             authSession={authSession}
+                            isHistoryOpen={historyTabId === paneTab.id}
+                            onCloseHistory={closeHistory}
                             pageId={paneDoc.pageId}
                             pageWidth={pagesById.get(paneDoc.pageId)?.pageWidth}
                             pages={pages}
@@ -5130,6 +5363,12 @@ export default function App() {
                             onTrashPageBlocks={handleTrashPageBlocks}
                             onOpenOrCreateCollectionRowPage={handleOpenOrCreateCollectionRowPage}
                             onSyncPageWidthFromYjs={handleSyncPageWidthFromYjs}
+                            templatePreview={paneTab.id === activeTabId ? templatePreview : null}
+                            templateApplyRequest={paneTab.id === activeTabId ? templateApplyRequest : null}
+                            onOpenTemplates={() => {
+                              setActiveTabId(paneTab.id);
+                              openTemplatePanel();
+                            }}
                           />
                         </CollectionActionsContext.Provider>
                       </WorkspacePagesContext.Provider>
@@ -5167,6 +5406,53 @@ export default function App() {
         </div>
       </main>
 
+      {templateDialog && (
+        <TemplateSaveDialog
+          initial={templateDialog.initial}
+          pageBlocks={templateDialog.blocks}
+          onClose={() => setTemplateDialog(null)}
+          onSave={async (values) => {
+            const { template } = templateDialog;
+            if (template) {
+              const { template: saved } = await workspaceApi.updateTemplate(template.id, values);
+              setUserTemplates((prev) => prev.map((t) => (t.id === saved.id ? toPageTemplate(saved) : t)));
+            } else {
+              const { template: saved } = await workspaceApi.createTemplate({ ...values, blocks: values.blocks ?? [] });
+              setUserTemplates((prev) => [toPageTemplate(saved), ...prev]);
+            }
+            setTemplateDialog(null);
+            openTemplatePanel();
+          }}
+        />
+      )}
+      <TemplatePanel
+        isOpen={isTemplatePanelOpen}
+        userTemplates={userTemplates}
+        onSaveCurrent={() => activePageId && void openSaveTemplateDialog(activePageId)}
+        onEditTemplate={(template) =>
+          setTemplateDialog({
+            template,
+            initial: { name: template.name, icon: template.icon, description: template.description },
+          })
+        }
+        onOverwriteTemplate={(template) => activePageId && void openSaveTemplateDialog(activePageId, template)}
+        onDeleteTemplate={(template) =>
+          void workspaceApi
+            .deleteTemplate(template.id)
+            .then(() => setUserTemplates((prev) => prev.filter((t) => t.id !== template.id)))
+            .catch((error) => console.error("Failed to delete template", error))
+        }
+        canApply={
+          !isReadOnlyUser &&
+          Boolean(activePageId) &&
+          activePageId !== HOME_PAGE_ID &&
+          pagesById.get(activePageId)?.kind !== "canvas"
+        }
+        onClose={() => setIsTemplatePanelOpen(false)}
+        onPreview={setTemplatePreview}
+        onApply={(template) => setTemplateApplyRequest((prev) => ({ template, nonce: (prev?.nonce ?? 0) + 1 }))}
+        onOpenAI={() => setIsAIPanelOpen(true)}
+      />
       <AIChatPanel
         isOpen={isAIPanelOpen}
         activePageId={activePageId && activePageId !== HOME_PAGE_ID ? activePageId : undefined}

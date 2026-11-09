@@ -1,0 +1,460 @@
+/**
+ * 페이지 템플릿: 우측 템플릿 패널, 본문 고스트 미리보기, 빈 페이지 시작 링크, 적용 토스트
+ */
+
+/* ==========================================================================
+ * 1. 우측 템플릿 패널 (틀은 .ai-panel 을 그대로 쓴다)
+ * ========================================================================== */
+.template-panel__search {
+  flex-shrink: 0;
+  padding: 10px 12px 6px;
+}
+
+.template-panel__search input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  outline: none;
+}
+
+.template-panel__search input:focus {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+}
+
+.template-panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.template-panel__group-label,
+.template-panel__group-toggle {
+  margin: 0;
+  padding: 4px 6px;
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: 0.02em;
+}
+
+.template-panel__group-toggle {
+  width: 100%;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: none;
+  font-family: var(--ds-font-sans);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.template-panel__group-toggle:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-muted);
+}
+
+.template-panel__chevron {
+  width: 10px;
+  font-size: var(--ds-text-3xs);
+}
+
+.template-panel__list {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.template-panel__item {
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: none;
+  font-family: var(--ds-font-sans);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.template-panel__item:hover:not(:disabled),
+.template-panel__item:focus-visible {
+  background: var(--ds-bg-hover);
+  outline: none;
+}
+
+.template-panel__item:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.template-panel__icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-sidebar);
+  display: grid;
+  place-items: center;
+  font-size: var(--ds-text-xl);
+}
+
+.template-panel__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.template-panel__name {
+  color: var(--ds-text-strong);
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-medium);
+}
+
+.template-panel__desc {
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-xs);
+  line-height: 1.4;
+}
+
+.template-panel__empty {
+  margin: 0;
+  padding: 12px 8px;
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-sm);
+}
+
+.template-panel__ai {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  border-top: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-sidebar);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-text-muted);
+  cursor: pointer;
+}
+
+.template-panel__ai strong {
+  color: var(--ds-text-accent, var(--ds-color-accent));
+  font-weight: var(--ds-weight-semibold);
+}
+
+.template-panel__ai:hover {
+  background: var(--ds-bg-hover);
+}
+
+/* ==========================================================================
+ * 2. 본문 고스트 미리보기
+ * ========================================================================== */
+.template-ghost {
+  position: relative;
+  margin: 4px 0 24px;
+  padding: 14px 24px 8px;
+  border-top: 1px dashed var(--ds-border-default);
+  color: var(--ds-text-primary);
+  opacity: 0.45;
+  pointer-events: none;
+  animation: template-ghost-in 160ms ease;
+  /* 아래로 갈수록 흐려져 "아직 적용 전"임을 보여 준다 */
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+.template-ghost__label {
+  position: absolute;
+  top: -10px;
+  left: 24px;
+  padding: 0 8px;
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+}
+
+@keyframes template-ghost-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .template-ghost {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+ * 3. 빈 페이지 "템플릿에서 시작" 링크
+ * ========================================================================== */
+.template-start-hint {
+  margin: 0 0 0 24px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: none;
+  color: var(--ds-text-subtle);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.template-start-hint:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+}
+
+/* ==========================================================================
+ * 4. 적용 토스트 (실행 취소)
+ * ========================================================================== */
+.template-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 60;
+  transform: translateX(-50%);
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-text-strong);
+  color: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-popover);
+  font-size: var(--ds-text-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.template-toast button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: inherit;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-semibold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.template-toast button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ==========================================================================
+ * 5. 내 템플릿: 저장 버튼, 항목 ⋯ 메뉴
+ * ========================================================================== */
+.template-panel__search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.template-panel__save {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px dashed var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  background: none;
+  color: var(--ds-text-muted);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.template-panel__save:hover:not(:disabled) {
+  border-color: var(--ds-border-accent);
+  background: var(--ds-bg-accent-subtle);
+  color: var(--ds-text-strong);
+}
+
+.template-panel__save:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.template-panel__row {
+  position: relative;
+}
+
+.template-panel__more {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: none;
+  color: var(--ds-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.template-panel__row:hover .template-panel__more,
+.template-panel__more:focus-visible,
+.template-panel__more--open {
+  opacity: 1;
+}
+
+.template-panel__more:hover,
+.template-panel__more--open {
+  background: var(--ds-bg-hover-strong);
+}
+
+.template-panel__menu {
+  position: absolute;
+  top: 34px;
+  right: 6px;
+  z-index: 5;
+  min-width: 180px;
+}
+
+.template-panel__danger {
+  color: #c93c37;
+}
+
+/* ==========================================================================
+ * 6. 템플릿으로 저장 창
+ * ========================================================================== */
+.search-modal.template-save {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.template-save__header {
+  padding: 12px 12px 0 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ds-text-strong);
+  font-size: var(--ds-text-base);
+}
+
+.template-save__fields {
+  padding: 0 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.template-save__icon {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-sidebar);
+  font-size: 1.6rem;
+  text-align: center;
+}
+
+.template-save__inputs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.template-save__inputs label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+
+.template-save__inputs label span {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.template-save__inputs input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+}
+
+.template-save__icon:focus,
+.template-save__inputs input:focus {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+  outline: none;
+}
+
+.template-save__check {
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-text-sm);
+}
+
+.template-save__preview {
+  max-height: 240px;
+  margin: 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-sidebar);
+  overflow-y: auto;
+}
+
+.template-save__note {
+  margin: -4px 16px 0;
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-xs);
+}
+
+.template-save__footer {
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-save__scope {
+  margin-right: auto;
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-xs);
+}
+.template-save__error { color: #c93c37; }

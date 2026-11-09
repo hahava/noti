@@ -17,6 +17,7 @@ import type {
   PageItem,
   TrashedPageItem,
   PageLinkSummary,
+  PageVersionSummary,
   SavedAttachment,
   SaveResult,
   SystemConfig,
@@ -60,8 +61,20 @@ export function getStoredServerHost(): string {
   return saved ? normalizeServerHost(saved) : DEFAULT_SERVER_HOST;
 }
 
+/**
+ * 데스크톱 앱이 서버 화면을 띄울 때 넘겨준 로그인 세션을 이 주소의 저장소로 옮긴다.
+ * (앱에 묶인 로그인 화면과 서버 화면은 주소가 달라 localStorage 를 같이 쓰지 못한다)
+ */
+function adoptDesktopSession(): void {
+  const session = window.desktop?.takePendingSession?.();
+  if (session && session.token && session.user && session.serverHost) {
+    saveAuthSession(session);
+  }
+}
+
 export function getStoredAuthSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
+  adoptDesktopSession();
   const rawHost = window.localStorage.getItem(STORAGE_SERVER_HOST_KEY);
   const token = window.localStorage.getItem(STORAGE_AUTH_TOKEN_KEY);
   const rawUser = window.localStorage.getItem(STORAGE_AUTH_USER_KEY);
@@ -273,6 +286,18 @@ export type GraphData = {
 
 export type PagePreview = { title: string; icon: string | null; kind: string; excerpt: string; deleted: boolean };
 
+export interface UserTemplateInput {
+  name: string;
+  icon: string;
+  description: string;
+  blocks?: unknown[];
+}
+
+export interface UserTemplateRecord extends Required<UserTemplateInput> {
+  id: string;
+  updatedAt: string;
+}
+
 export const workspaceApi = {
   getGraph: () => requestJson<GraphData>("/api/graph"),
   getCanvas: (pageId: string) =>
@@ -360,6 +385,21 @@ export const workspaceApi = {
       layoutState?: WorkspaceLayoutState;
     }>("/api/pages"),
 
+  listPageVersions: (pageId: string) =>
+    requestJson<{ versions: PageVersionSummary[] }>(`/api/pages/${encodeURIComponent(pageId)}/versions`),
+
+  getPageVersion: (pageId: string, versionId: string) =>
+    requestJson<{ version: PageVersionSummary & { blocks: unknown[] } }>(
+      `/api/pages/${encodeURIComponent(pageId)}/versions/${encodeURIComponent(versionId)}`,
+    ),
+
+  /** 지금 본문을 기록으로 남기고, 되돌릴 본문(하위 페이지 구조를 지금에 맞춘 것)을 받는다. */
+  restorePageVersion: (pageId: string, versionId: string) =>
+    requestJson<{ blocks: unknown[] }>(
+      `/api/pages/${encodeURIComponent(pageId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: "POST" },
+    ),
+
   saveWorkspaceLayout: (layoutState: WorkspaceLayoutState) =>
     requestJson<{ ok: boolean }>("/api/workspace-layout", {
       method: "PUT",
@@ -397,6 +437,24 @@ export const workspaceApi = {
         placement: payload.placement,
       }),
     }),
+
+  listTemplates: () => requestJson<{ templates: UserTemplateRecord[] }>("/api/templates"),
+
+  createTemplate: (input: UserTemplateInput) =>
+    requestJson<{ template: UserTemplateRecord }>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  /** blocks 를 빼면 이름·아이콘·설명만 바뀐다 */
+  updateTemplate: (id: string, input: UserTemplateInput) =>
+    requestJson<{ template: UserTemplateRecord }>(`/api/templates/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+
+  deleteTemplate: (id: string) =>
+    requestJson<{ ok: true }>(`/api/templates/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   deletePage: (id: string) =>
     requestJson<{ pages: PageItem[]; nextActivePageId: string }>(

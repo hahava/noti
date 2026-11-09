@@ -23,8 +23,16 @@ import {
   revokeSessionToken,
   saveDocumentToDb,
   saveWorkspaceLayoutToDb,
+  listPageVersionsFromDb,
+  getPageVersionFromDb,
+  preparePageVersionRestore,
   updatePageInDb,
   type WorkspaceLayoutState,
+  listPageTemplatesFromDb,
+  createPageTemplateInDb,
+  updatePageTemplateInDb,
+  deletePageTemplateFromDb,
+  type PageTemplateInput,
 } from "./db.js";
 import { ensureCollectionInDb, getCollectionFromDb, listCollectionsFromDb } from "./collection-db.js";
 import { AbortedError, buildRetrievalQuery, chatWithAI, streamChatWithAI, type AIChatRequest } from "./ai-chat.js";
@@ -100,6 +108,19 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+/** 템플릿 요청 본문 검사 (requireBlocks: 새로 만들 때는 본문이 꼭 있어야 한다) */
+function parseTemplateInput(body: Record<string, unknown>, requireBlocks: boolean): PageTemplateInput | string {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 100) return "이름은 1~100자여야 합니다.";
+  const icon = typeof body.icon === "string" && body.icon.trim() ? body.icon.trim() : "📄";
+  if (icon.length > 16) return "아이콘이 너무 깁니다.";
+  const description = typeof body.description === "string" ? body.description.trim() : "";
+  if (description.length > 300) return "설명은 300자 이하여야 합니다.";
+  if (body.blocks !== undefined && !Array.isArray(body.blocks)) return "blocks 는 배열이어야 합니다.";
+  if (requireBlocks && !Array.isArray(body.blocks)) return "blocks 가 필요합니다.";
+  return { name, icon, description, blocks: body.blocks as unknown[] | undefined };
+}
+
 async function readJsonBody<T = Record<string, unknown>>(req: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -147,7 +168,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         status: "ok",
         serverName: "Noty Workspace Server",
-        version: "1.0.0",
+        version: "1.1.0",
       });
       return;
     }
@@ -348,6 +369,42 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 2.6. 내 페이지 템플릿: GET/POST /api/templates, PUT/DELETE /api/templates/:id
+    if (pathname === "/api/templates") {
+      if (req.method === "GET") {
+        sendJson(res, 200, { templates: await listPageTemplatesFromDb(authUser.id) });
+        return;
+      }
+      if (req.method === "POST") {
+        const input = parseTemplateInput(await readJsonBody(req), true);
+        if (typeof input === "string") {
+          sendJson(res, 400, { error: input });
+          return;
+        }
+        sendJson(res, 201, { template: await createPageTemplateInDb(authUser.id, input) });
+        return;
+      }
+    }
+    const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
+    if (templateMatch) {
+      const templateId = decodeURIComponent(templateMatch[1]);
+      if (req.method === "PUT") {
+        const input = parseTemplateInput(await readJsonBody(req), false);
+        if (typeof input === "string") {
+          sendJson(res, 400, { error: input });
+          return;
+        }
+        const template = await updatePageTemplateInDb(authUser.id, templateId, input);
+        sendJson(res, template ? 200 : 404, template ? { template } : { error: "템플릿을 찾을 수 없습니다." });
+        return;
+      }
+      if (req.method === "DELETE") {
+        const deleted = await deletePageTemplateFromDb(authUser.id, templateId);
+        sendJson(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: "템플릿을 찾을 수 없습니다." });
+        return;
+      }
+    }
+
     // 3. Page document load & save: /api/pages/:id/document
     const docMatch = pathname.match(/^\/api\/pages\/([^/]+)\/document$/);
     if (docMatch) {
@@ -365,6 +422,27 @@ const server = http.createServer(async (req, res) => {
         }
         const result = await saveDocumentToDb(pageId, body.blocks, body.title, authUser.id);
         sendJson(res, 200, result);
+        return;
+      }
+    }
+
+    // 3.2. 페이지 기록: GET /api/pages/:id/versions[/:vid], POST /api/pages/:id/versions/:vid/restore
+    const versionMatch = pathname.match(/^\/api\/pages\/([^/]+)\/versions(?:\/([^/]+)(\/restore)?)?$/);
+    if (versionMatch) {
+      const pageId = decodeURIComponent(versionMatch[1]);
+      const versionId = versionMatch[2] ? decodeURIComponent(versionMatch[2]) : null;
+      if (!versionId && req.method === "GET") {
+        sendJson(res, 200, { versions: await listPageVersionsFromDb(pageId) });
+        return;
+      }
+      if (versionId && !versionMatch[3] && req.method === "GET") {
+        const version = await getPageVersionFromDb(pageId, versionId);
+        sendJson(res, version ? 200 : 404, version ? { version } : { error: "기록을 찾을 수 없습니다." });
+        return;
+      }
+      if (versionId && versionMatch[3] && req.method === "POST") {
+        const blocks = await preparePageVersionRestore(pageId, versionId);
+        sendJson(res, blocks ? 200 : 404, blocks ? { blocks } : { error: "기록을 찾을 수 없습니다." });
         return;
       }
     }

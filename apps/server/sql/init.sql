@@ -247,3 +247,28 @@ CREATE TABLE IF NOT EXISTS system_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- 페이지 기록: 본문이 바뀌기 전 상태를 일정 간격(PAGE_VERSION_INTERVAL_MS)으로 남긴다. 되돌리기용.
+-- created_at: 기록한 시각(간격 계산용) / edited_at: 그 본문이 마지막으로 수정된 시각(화면 표시용)
+CREATE TABLE IF NOT EXISTS page_versions (
+  id BIGSERIAL PRIMARY KEY,
+  page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT '',
+  blocks JSONB NOT NULL,
+  edited_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_page_versions_page ON page_versions(page_id, created_at DESC);
+
+-- 내 페이지 템플릿: 계정별로 저장한 템플릿 (본문은 저장 시점의 스냅샷, 원본 페이지와 연결되지 않음)
+CREATE TABLE IF NOT EXISTS page_templates (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  icon TEXT NOT NULL DEFAULT '📄',
+  description TEXT NOT NULL DEFAULT '',
+  blocks JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_page_templates_user ON page_templates(user_id, created_at DESC);

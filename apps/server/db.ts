@@ -1176,6 +1176,95 @@ export async function loadDocumentFromDb(
   };
 }
 
+/** 이 시간 안의 저장은 한 기록으로 묶는다. (verify 가 짧게 바꿔 쓴다) */
+const PAGE_VERSION_INTERVAL_MS = Number(process.env.PAGE_VERSION_INTERVAL_MS) || 10 * 60 * 1000;
+const MAX_PAGE_VERSIONS = 100;
+
+/**
+ * 바뀌기 전 본문을 페이지 기록으로 남긴다.
+ * nextBlocks 를 주면(일반 저장) 본문이 실제로 바뀌고 마지막 기록이 간격보다 오래됐을 때만,
+ * null 이면(되돌리기 직전) 항상 남긴다.
+ */
+async function snapshotPageInTx(client: PoolClient, pageId: string, nextBlocks: unknown[] | null): Promise<void> {
+  const inserted = await client.query(
+    `INSERT INTO page_versions (page_id, title, blocks, edited_at)
+     SELECT p.id, p.title, p.blocks, p.updated_at FROM pages p
+     WHERE p.id = $1
+       AND ($2::jsonb IS NULL OR (
+         p.blocks IS DISTINCT FROM $2::jsonb
+         AND NOT EXISTS (
+           SELECT 1 FROM page_versions v
+           WHERE v.page_id = p.id AND v.created_at > NOW() - make_interval(secs => $3::double precision / 1000)
+         )
+       ))`,
+    [pageId, nextBlocks ? JSON.stringify(nextBlocks) : null, PAGE_VERSION_INTERVAL_MS],
+  );
+  if (!inserted.rowCount) return;
+  await client.query(
+    `DELETE FROM page_versions WHERE page_id = $1 AND id NOT IN (
+       SELECT id FROM page_versions WHERE page_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
+     )`,
+    [pageId, MAX_PAGE_VERSIONS],
+  );
+}
+
+export interface PageVersionSummary {
+  id: string;
+  title: string;
+  editedAt: string;
+}
+
+export async function listPageVersionsFromDb(pageId: string): Promise<PageVersionSummary[]> {
+  const res = await pool.query(
+    "SELECT id, title, edited_at FROM page_versions WHERE page_id = $1 ORDER BY created_at DESC, id DESC",
+    [pageId],
+  );
+  return res.rows.map((row) => ({ id: String(row.id), title: row.title, editedAt: new Date(row.edited_at).toISOString() }));
+}
+
+export async function getPageVersionFromDb(
+  pageId: string,
+  versionId: string,
+): Promise<(PageVersionSummary & { blocks: unknown[] }) | null> {
+  if (!/^\d+$/.test(versionId)) return null;
+  const res = await pool.query(
+    "SELECT id, title, blocks, edited_at FROM page_versions WHERE id = $1 AND page_id = $2",
+    [versionId, pageId],
+  );
+  const row = res.rows[0];
+  return row
+    ? { id: String(row.id), title: row.title, editedAt: new Date(row.edited_at).toISOString(), blocks: row.blocks }
+    : null;
+}
+
+/**
+ * 되돌리기 준비: 지금 본문을 기록으로 남기고, 고른 기록의 본문을 돌려준다.
+ * 실제 교체는 열린 편집기가 한다 (실시간 협업으로 다른 화면에도 반영되고 평소처럼 저장된다).
+ * 하위 페이지 블록은 지금 계층에 맞춘다. 옛 본문에 없는 하위 페이지가 휴지통으로 가지 않게 하기 위함.
+ */
+export async function preparePageVersionRestore(pageId: string, versionId: string): Promise<unknown[] | null> {
+  const version = await getPageVersionFromDb(pageId, versionId);
+  if (!version) return null;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const page = await client.query("SELECT id FROM pages WHERE id = $1 AND deleted_at IS NULL FOR UPDATE", [pageId]);
+    if (!page.rowCount) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    await snapshotPageInTx(client, pageId, null);
+    const childPageIds = await listChildPageIdsInTx(client, pageId);
+    await client.query("COMMIT");
+    return reconcileChildPageBlocks(version.blocks, childPageIds, { reorder: false }).blocks;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function saveDocumentToDb(
   pageId: string,
   blocks: readonly unknown[],
@@ -1202,6 +1291,7 @@ export async function saveDocumentToDb(
       reorder: false,
     });
     const nextBlocks = reconciled.blocks;
+    await snapshotPageInTx(client, pageId, nextBlocks);
 
     const plainText = extractDocumentPlainText(nextBlocks);
     const cleanTitle = title?.trim();
@@ -1272,4 +1362,71 @@ export async function saveDocumentToDb(
     pages,
     backlinks,
   };
+}
+
+/* ==========================================================================
+ * 내 페이지 템플릿 (계정별)
+ * ========================================================================== */
+export interface PageTemplateRecord {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  blocks: unknown[];
+  updatedAt: string;
+}
+
+export interface PageTemplateInput {
+  name: string;
+  icon: string;
+  description: string;
+  blocks?: unknown[];
+}
+
+const toTemplateRecord = (row: any): PageTemplateRecord => ({
+  id: row.id,
+  name: row.name,
+  icon: row.icon,
+  description: row.description,
+  blocks: row.blocks,
+  updatedAt: new Date(row.updated_at).toISOString(),
+});
+
+export async function listPageTemplatesFromDb(userId: string): Promise<PageTemplateRecord[]> {
+  const res = await pool.query(
+    "SELECT id, name, icon, description, blocks, updated_at FROM page_templates WHERE user_id = $1 ORDER BY created_at DESC",
+    [userId],
+  );
+  return res.rows.map(toTemplateRecord);
+}
+
+export async function createPageTemplateInDb(userId: string, input: PageTemplateInput): Promise<PageTemplateRecord> {
+  const res = await pool.query(
+    `INSERT INTO page_templates (id, user_id, name, icon, description, blocks)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+     RETURNING id, name, icon, description, blocks, updated_at`,
+    [`tpl-${randomUUID()}`, userId, input.name, input.icon, input.description, JSON.stringify(input.blocks ?? [])],
+  );
+  return toTemplateRecord(res.rows[0]);
+}
+
+/** 본인 템플릿만 바꾼다. blocks 를 주지 않으면(이름·아이콘만 변경) 본문은 그대로 둔다. */
+export async function updatePageTemplateInDb(
+  userId: string,
+  templateId: string,
+  input: PageTemplateInput,
+): Promise<PageTemplateRecord | null> {
+  const res = await pool.query(
+    `UPDATE page_templates
+     SET name = $3, icon = $4, description = $5, blocks = COALESCE($6::jsonb, blocks), updated_at = NOW()
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, name, icon, description, blocks, updated_at`,
+    [templateId, userId, input.name, input.icon, input.description, input.blocks ? JSON.stringify(input.blocks) : null],
+  );
+  return res.rows[0] ? toTemplateRecord(res.rows[0]) : null;
+}
+
+export async function deletePageTemplateFromDb(userId: string, templateId: string): Promise<boolean> {
+  const res = await pool.query("DELETE FROM page_templates WHERE id = $1 AND user_id = $2", [templateId, userId]);
+  return Boolean(res.rowCount);
 }
