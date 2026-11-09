@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
+  BlockNoteEditor,
   BlockNoteSchema,
   combineByGroup,
   createCodeBlockSpec,
@@ -43,6 +44,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { PageHistoryModal, PreviewBlocks } from "./PageHistory";
 import { LinkPasteMenu, createBookmarkBlockSpec, createEmbedBlockSpec, createTocBlockSpec, getLinkBlockSlashMenuItems, type LinkPasteState } from "./LinkBlocks";
 import { safeHttpUrl } from "./link-embeds";
+import { NotionImportDialog } from "./NotionImport";
 import { TemplatePanel, TemplateSaveDialog, TemplateSvgIcon } from "./TemplatePanel";
 import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, type PageTemplate } from "./templates";
 import type { UserTemplateRecord } from "./api";
@@ -2469,6 +2471,9 @@ export default function App() {
     setIsAIPanelOpen(false);
     setIsTemplatePanelOpen(true);
   };
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  // 가져오기를 마친 뒤 열 페이지: 새 페이지 목록이 들어온 다음에 연다
+  const [pendingOpenPageId, setPendingOpenPageId] = useState<string | null>(null);
   const [userTemplates, setUserTemplates] = useState<PageTemplate[]>([]);
   const toPageTemplate = (record: UserTemplateRecord): PageTemplate => ({ ...record, category: USER_TEMPLATE_CATEGORY });
   // 로그인하면 내 템플릿을 불러온다. 서버 저장 전에 이 브라우저에 저장해 둔 템플릿이 있으면 한 번 서버로 옮긴다.
@@ -3324,6 +3329,13 @@ export default function App() {
   };
 
   // 페이지 선택 (일반 클릭: 현재 활성 탭/창에서 이동, ⌘+클릭: 새 탭, ⌥+클릭: 우측 분할 창)
+  useEffect(() => {
+    if (pendingOpenPageId && pagesById.has(pendingOpenPageId)) {
+      setPendingOpenPageId(null);
+      void handleSelectPage(pendingOpenPageId);
+    }
+  }, [pendingOpenPageId, pagesById]);
+
   const handleSelectPage = async (nextId: string, options?: SelectPageOptions) => {
     if (nextId !== HOME_PAGE_ID) {
       const target = pagesById.get(nextId);
@@ -4358,6 +4370,12 @@ export default function App() {
 
         {/* 사이드바 최하단 구분선 및 설정/로그아웃 버튼 */}
         <div className="sidebar-footer">
+          {!isReadOnlyUser && (
+            <button type="button" className="sidebar-action-row" onClick={() => setIsImportOpen(true)}>
+              <span className="sidebar-action-row__icon" aria-hidden="true">⇩</span>
+              <span className="sidebar-action-row__label">Notion 가져오기</span>
+            </button>
+          )}
           <button type="button" className="sidebar-action-row" onClick={() => void openTrash()}>
             <span className="sidebar-action-row__icon"><TrashSvgIcon /></span>
             <span className="sidebar-action-row__label">휴지통</span>
@@ -5501,6 +5519,34 @@ export default function App() {
         </div>
       </main>
 
+      {isImportOpen && (
+        <NotionImportDialog
+          deps={{
+            parseMarkdown: (() => {
+              // 화면에 붙이지 않은 편집기: 앱과 같은 블록 스키마로 마크다운만 변환한다
+              let parser: any = null;
+              return (markdown: string) => {
+                parser ??= BlockNoteEditor.create({ schema } as any);
+                return parser.tryParseMarkdownToBlocks(markdown);
+              };
+            })(),
+            createPage: async (parentId, title) =>
+              (await workspaceApi.createPage({ parentId, title, insertIntoParentBlocks: false })).page.id,
+            saveBlocks: async (id, blocks, title) => {
+              await workspaceApi.saveDocument(blocks, { id, title });
+            },
+            uploadFile: async (name, type, bytes) => (await workspaceApi.saveAttachment({ name, type, bytes })).url,
+            ensureCollection: async (id, ownerPageId, data) => {
+              await workspaceApi.ensureCollection(id, ownerPageId, data);
+            },
+          }}
+          onClose={() => {
+            setIsImportOpen(false);
+            handleRefreshPages();
+          }}
+          onOpenPage={setPendingOpenPageId}
+        />
+      )}
       {templateDialog && (
         <TemplateSaveDialog
           initial={templateDialog.initial}
