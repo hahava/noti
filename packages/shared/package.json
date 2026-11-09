@@ -1,6 +1,6 @@
 {
   "name": "@noty/shared",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Noty 웹 화면과 서버가 함께 쓰는 문서 도메인 코드 (컬렉션 스키마·Yjs 구조·계산)",
   "license": "GPL-3.0-only",

@@ -1,6 +1,6 @@
 {
   "name": "@noty/admin",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Noty 어드민 (계정·역할, 모델, 색인·LLM 위키, 시스템 설정). 메인 앱과 다른 포트에서 실행한다.",
