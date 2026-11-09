@@ -16,7 +16,7 @@
     "start:server:prd": "NODE_ENV=production tsx apps/server/index.ts",
     "start:collaboration:prd": "NODE_ENV=production tsx apps/server/collaboration.ts",
     "test:collaboration": "tsx --test apps/server/collaboration-store.test.ts",
-    "test": "tsx --test apps/server/*.test.ts apps/admin/server/*.test.ts packages/core/src/*.test.ts packages/shared/src/*.test.ts",
+    "test": "tsx --test apps/server/*.test.ts apps/admin/server/*.test.ts apps/web/src/*.test.ts packages/core/src/*.test.ts packages/shared/src/*.test.ts",
     "dev:web": "concurrently -k \"npm:dev:server\" \"npm:dev:collaboration\" \"vite --config apps/web/vite.config.ts --host 127.0.0.1\"",
     "dev:web:lan": "HOST=0.0.0.0 COLLAB_HOST=0.0.0.0 VITE_DEV_HOST=0.0.0.0 concurrently -k \"npm:dev:server\" \"npm:dev:collaboration\" \"vite --config apps/web/vite.config.ts --host 0.0.0.0\"",
     "dev:electron": "wait-on http-get://127.0.0.1:4000/api/health http://127.0.0.1:5173 && electron apps/desktop --dev-server-url=http://127.0.0.1:5173",

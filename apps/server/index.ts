@@ -34,6 +34,7 @@ import {
   deletePageTemplateFromDb,
   type PageTemplateInput,
 } from "./db.js";
+import { fetchLinkPreview, LinkPreviewError } from "./link-preview.js";
 import { ensureCollectionInDb, getCollectionFromDb, listCollectionsFromDb } from "./collection-db.js";
 import { AbortedError, buildRetrievalQuery, chatWithAI, streamChatWithAI, type AIChatRequest } from "./ai-chat.js";
 import {
@@ -366,6 +367,17 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 400, { error: "Invalid layout state" });
+      return;
+    }
+
+    // 2.55. 북마크 블록용 링크 정보: GET /api/link-preview?url=
+    if (pathname === "/api/link-preview" && req.method === "GET") {
+      try {
+        sendJson(res, 200, { preview: await fetchLinkPreview(url.searchParams.get("url") ?? "") });
+      } catch (error) {
+        const message = error instanceof LinkPreviewError ? error.message : "링크 정보를 가져오지 못했습니다.";
+        sendJson(res, 422, { error: message });
+      }
       return;
     }
 

@@ -13,7 +13,8 @@ const RENDERER_CSP = [
   "font-src 'self' data:",
   "connect-src 'self' http: https: ws: wss: app-asset:",
   "worker-src 'self' blob:",
-  "frame-src 'none'",
+  // 임베드 블록이 띄우는 사이트만 (apps/web/src/link-embeds.ts 의 허용 목록과 같게 유지)
+  "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com https://www.figma.com https://docs.google.com https://www.google.com https://maps.google.com https://codepen.io https://open.spotify.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

@@ -286,6 +286,15 @@ export type GraphData = {
 
 export type PagePreview = { title: string; icon: string | null; kind: string; excerpt: string; deleted: boolean };
 
+export interface LinkPreviewData {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  icon: string;
+  siteName: string;
+}
+
 export interface UserTemplateInput {
   name: string;
   icon: string;
@@ -437,6 +446,9 @@ export const workspaceApi = {
         placement: payload.placement,
       }),
     }),
+
+  getLinkPreview: (url: string) =>
+    requestJson<{ preview: LinkPreviewData }>(`/api/link-preview?url=${encodeURIComponent(url)}`),
 
   listTemplates: () => requestJson<{ templates: UserTemplateRecord[] }>("/api/templates"),
 

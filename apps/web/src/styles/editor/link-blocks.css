@@ -1,0 +1,212 @@
+/**
+ * 목차 · 북마크 · 임베드 블록
+ */
+
+/* 목차 */
+.noty-toc {
+  width: 100%;
+  margin: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.noty-toc__item {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  padding-right: 6px;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: none;
+  color: var(--ds-text-muted);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--ds-border-default);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.noty-toc__item:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-strong);
+}
+
+.noty-toc--empty,
+.noty-linkblock__empty {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-sidebar);
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-sm);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.noty-linkblock__empty button,
+.noty-linkblock__prompt button {
+  padding: 4px 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  cursor: pointer;
+}
+
+/* 주소 입력 */
+.noty-linkblock__prompt {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-sidebar);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.noty-linkblock__prompt input {
+  flex: 1;
+  min-width: 200px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+}
+
+.noty-linkblock__prompt input:focus {
+  border-color: var(--ds-border-accent);
+  box-shadow: var(--ds-shadow-focus);
+  outline: none;
+}
+
+.noty-linkblock__hint,
+.noty-linkblock__error {
+  flex-basis: 100%;
+  font-size: var(--ds-text-xs);
+}
+
+.noty-linkblock__hint {
+  color: var(--ds-text-subtle);
+}
+
+.noty-linkblock__error {
+  color: #c93c37;
+}
+
+/* 북마크 */
+.noty-bookmark {
+  width: 100%;
+  min-height: 96px;
+  margin: 2px 0;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  overflow: hidden;
+  transition: background 120ms ease;
+}
+
+.noty-bookmark:hover {
+  background: var(--ds-bg-hover);
+}
+
+.noty-bookmark__text {
+  min-width: 0;
+  flex: 1;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.noty-bookmark__title {
+  color: var(--ds-text-strong);
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noty-bookmark__desc {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.noty-bookmark__url {
+  margin-top: auto;
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-xs);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.noty-bookmark__url span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noty-bookmark__url img {
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.noty-bookmark__image {
+  width: 32%;
+  max-width: 240px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-sidebar);
+}
+
+.noty-bookmark__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (max-width: 520px) {
+  .noty-bookmark__image {
+    display: none;
+  }
+}
+
+/* 임베드 */
+.noty-embed {
+  width: 100%;
+  margin: 2px 0;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-sm);
+  overflow: hidden;
+  background: var(--ds-bg-sidebar);
+}
+
+.noty-embed--video {
+  aspect-ratio: 16 / 9;
+}
+
+.noty-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}

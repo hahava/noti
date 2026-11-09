@@ -41,6 +41,7 @@ import {
 } from "@blocknote/xl-multi-column";
 import { BlockNoteView } from "@blocknote/mantine";
 import { PageHistoryModal, PreviewBlocks } from "./PageHistory";
+import { createBookmarkBlockSpec, createEmbedBlockSpec, createTocBlockSpec, getLinkBlockSlashMenuItems } from "./LinkBlocks";
 import { TemplatePanel, TemplateSaveDialog, TemplateSvgIcon } from "./TemplatePanel";
 import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, type PageTemplate } from "./templates";
 import type { UserTemplateRecord } from "./api";
@@ -685,6 +686,9 @@ const schema = withMultiColumn(
       page: createPageBlockSpec(),
       collection: createCollectionBlockSpec(),
       callout: createCalloutBlockSpec(),
+      toc: createTocBlockSpec(),
+      bookmark: createBookmarkBlockSpec(),
+      embed: createEmbedBlockSpec(),
     },
     inlineContentSpecs: {
       math: createReactInlineMathSpec(),
@@ -1879,6 +1883,7 @@ function EditorPane({
                   getLinkedCollectionSlashItem(),
                 ],
                 getCalloutSlashMenuItems(editor),
+                getLinkBlockSlashMenuItems(editor),
                 getMultiColumnSlashMenuItems(editor),
                 getMathSlashMenuItems(editor),
                 getDiagramSlashMenuItems(editor),
