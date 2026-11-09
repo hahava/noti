@@ -1930,6 +1930,52 @@ function EditorPane({
   );
 }
 
+/**
+ * 캔버스 페이지 카드 안의 편집기: 페이지 화면과 같은 EditorPane 을 그대로 쓴다
+ * (같은 블록 스키마·실시간 협업·저장 흐름이라 카드에서 고친 내용이 페이지와 항상 같다).
+ */
+function CanvasCardEditor({
+  pageId,
+  contextValue,
+  editorProps,
+}: {
+  pageId: string;
+  contextValue: WorkspacePagesContextValue;
+  editorProps: Omit<EditorPaneProps, "pageId" | "initialContent" | "isHistoryOpen" | "onCloseHistory">;
+}) {
+  const [blocks, setBlocks] = useState<PartialBlock<any, any, any>[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    workspaceApi
+      .loadDocument(pageId)
+      .then(({ blocks: loaded }) => {
+        if (cancelled) return;
+        setBlocks(
+          loaded
+            ? normalizeStoredBlocks(loaded)
+            : [
+                { type: "heading", props: { level: 1 }, content: editorProps.pagesById.get(pageId)?.title || "제목 없는 문서" },
+                { type: "paragraph", content: "" },
+              ],
+        );
+      })
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId]);
+  if (failed) return <div className="center-message">문서를 불러오지 못했습니다.</div>;
+  if (!blocks) return <div className="center-message">불러오는 중…</div>;
+  return (
+    <WorkspacePagesContext.Provider value={contextValue}>
+      <CollectionActionsContext.Provider value={{ parentPageId: pageId, onOpenOrCreateRowPage: editorProps.onOpenOrCreateCollectionRowPage }}>
+        <EditorPane {...editorProps} pageId={pageId} initialContent={blocks} isHistoryOpen={false} onCloseHistory={() => undefined} />
+      </CollectionActionsContext.Provider>
+    </WorkspacePagesContext.Provider>
+  );
+}
+
 interface PageTreeNodeProps {
   page: PageItem;
   pagesByParent: Map<string | null, PageItem[]>;
@@ -5326,6 +5372,28 @@ export default function App() {
                         onOpenPage={(id) => void handleSelectPage(id, { targetTabId: paneTab.id })}
                         onCreatePage={handleCreatePageFromCanvas}
                         onRename={(title) => handleRenamePageTitle(panePageId, title)}
+                        renderPageEditor={(cardPageId) => (
+                          <CanvasCardEditor
+                            pageId={cardPageId}
+                            contextValue={paneContextValue}
+                            editorProps={{
+                              authSession,
+                              // 실제 페이지 폭 값을 넘긴다 (편집기가 이 값을 Yjs 에 맞춰 두므로 임의 값을 넘기면 페이지 설정이 바뀐다)
+                              pageWidth: pagesById.get(cardPageId)?.pageWidth,
+                              pages,
+                              pagesById,
+                              onSelectPage: (id) => void handleSelectPage(id, { targetTabId: paneTab.id }),
+                              onInsertPageBlockAndOpen: (parentId, getUpdatedBlocks, kind) =>
+                                handleInsertPageBlockAndOpen(parentId, getUpdatedBlocks, paneTab.id, kind),
+                              onSaveBlocks: scheduleSave,
+                              onTitlePreviewChange: handleTitlePreviewChange,
+                              onReorderChildPages: handleReorderChildPages,
+                              onRequestPagesRefresh: handleRefreshPages,
+                              onTrashPageBlocks: handleTrashPageBlocks,
+                              onOpenOrCreateCollectionRowPage: handleOpenOrCreateCollectionRowPage,
+                            }}
+                          />
+                        )}
                       />
                     ) : paneDoc ? (
                       <WorkspacePagesContext.Provider value={paneContextValue}>

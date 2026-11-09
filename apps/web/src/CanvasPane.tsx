@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   Background,
   ConnectionMode,
@@ -16,6 +16,7 @@ import {
   type Connection,
   type Edge,
   type EdgeChange,
+  type FinalConnectionState,
   type Node,
   type NodeChange,
   type NodeProps,
@@ -24,7 +25,9 @@ import "@xyflow/react/dist/style.css";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import {
+  CANVAS_PRESET_COLORS,
   canvasMaps,
+  cardsInsideGroups,
   readCanvas,
   removeCanvasEdges,
   removeCanvasNodes,
@@ -33,12 +36,15 @@ import {
   upsertCanvasEdge,
   upsertCanvasNode,
   type CanvasData,
+  type CanvasEdge,
   type CanvasNode,
   type CanvasSide,
 } from "@noty/shared/canvas";
 import { resolveCollaborationWsUrl } from "./collaboration-url";
 import { resolveUploadUrl, workspaceApi, type PagePreview } from "./api";
 import type { AuthSession, PageItem } from "./vite-env";
+import { PreviewBlocks } from "./PageHistory";
+import { CanvasMarkdown, toggleCheckLine } from "./canvas-markdown";
 
 /**
  * 캔버스: 페이지 카드·메모·이미지·링크·그룹을 자유롭게 놓고 선으로 잇는 화면.
@@ -72,7 +78,91 @@ type CardData = {
   onUpdate: (id: string, patch: Partial<CanvasNode>) => void;
   onConvertToPage: (card: CanvasNode) => void;
   compact?: boolean;
+  /** 이 페이지 카드를 지금 카드 안에서 편집 중인지 */
+  editing?: boolean;
+  onStartEditing?: (card: CanvasNode) => void;
+  /** 카드 안에 띄울 페이지 편집기 (App 의 EditorPane) */
+  renderPageEditor?: (pageId: string) => ReactNode;
+  /** 메모의 [[페이지 제목]] → 페이지 id */
+  resolvePageByTitle?: (title: string) => string | undefined;
 };
+
+/** 미리 정한 색 "1"~"6" → CSS 색 (그 밖의 값은 #hex 그대로) */
+const COLOR_VALUES: Record<string, string> = {
+  "1": "#e03e3e",
+  "2": "#d9730d",
+  "3": "#cb912f",
+  "4": "#448361",
+  "5": "#337ea9",
+  "6": "#9065b0",
+};
+const COLOR_NAMES: Record<string, string> = { "1": "빨강", "2": "주황", "3": "노랑", "4": "초록", "5": "파랑", "6": "보라" };
+const colorValue = (color?: string) => (color ? COLOR_VALUES[color] ?? (/^#[0-9a-f]{3,8}$/i.test(color) ? color : undefined) : undefined);
+
+/** 연결선 화살표: 없음 / 한쪽 / 양쪽 (JSON Canvas 의 fromEnd·toEnd 조합) */
+type EdgeDirection = "none" | "forward" | "both";
+const edgeDirection = (edge: CanvasEdge): EdgeDirection =>
+  (edge.toEnd ?? "arrow") === "none" ? "none" : edge.fromEnd === "arrow" ? "both" : "forward";
+const DIRECTION_ENDS: Record<EdgeDirection, Pick<CanvasEdge, "fromEnd" | "toEnd">> = {
+  none: { fromEnd: undefined, toEnd: "none" },
+  forward: { fromEnd: undefined, toEnd: undefined },
+  both: { fromEnd: "arrow", toEnd: undefined },
+};
+
+/** 색 고르기: 없음 + 미리 정한 6가지 */
+function ColorSwatches({ value, onChange }: { value?: string; onChange: (color: string | undefined) => void }) {
+  return (
+    <div className="canvas-swatches" role="group" aria-label="색">
+      <button
+        type="button"
+        className={`canvas-swatch canvas-swatch--none ${!value ? "canvas-swatch--active" : ""}`}
+        aria-label="색 없음"
+        aria-pressed={!value}
+        title="색 없음"
+        onClick={() => onChange(undefined)}
+      />
+      {CANVAS_PRESET_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          className={`canvas-swatch ${value === color ? "canvas-swatch--active" : ""}`}
+          style={{ background: COLOR_VALUES[color] }}
+          aria-label={COLOR_NAMES[color]}
+          aria-pressed={value === color}
+          title={COLOR_NAMES[color]}
+          onClick={() => onChange(color)}
+        />
+      ))}
+    </div>
+  );
+}
+
+const OPPOSITE_SIDE: Record<CanvasSide, CanvasSide> = { top: "bottom", bottom: "top", left: "right", right: "left" };
+
+// 페이지 카드 본문 캐시 (같은 페이지 카드를 다시 그릴 때 다시 받지 않게)
+// shortcut: 카드마다 본문 전체를 한 번씩 받는다, 카드가 아주 많아지면 화면에 보이는 카드만 받게 바꾼다.
+const pageBlocksCache = new Map<string, unknown[]>();
+
+/** 페이지 카드에 보여 줄 본문 전체. refreshKey 가 바뀌면(편집을 마치면) 다시 받는다. */
+function usePageBlocks(pageId: string | undefined, enabled: boolean, refreshKey: unknown) {
+  const [blocks, setBlocks] = useState<unknown[] | null>(() => (pageId ? pageBlocksCache.get(pageId) ?? null : null));
+  useEffect(() => {
+    if (!pageId || !enabled) return;
+    let cancelled = false;
+    workspaceApi
+      .loadDocument(pageId)
+      .then(({ blocks: loaded }) => {
+        const list = Array.isArray(loaded) ? loaded : [];
+        pageBlocksCache.set(pageId, list);
+        if (!cancelled) setBlocks(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId, enabled, refreshKey]);
+  return blocks;
+}
 
 function SideHandles({ hidden }: { hidden: boolean }) {
   return (
@@ -106,30 +196,71 @@ function Resizer({ selected, readOnly, id, onUpdate, minWidth = 120, minHeight =
 }
 
 function PageCardNode({ data, selected }: NodeProps<Node<CardData>>) {
-  const { card, preview, pageMeta, readOnly, onOpenPage, onUpdate, compact } = data;
+  const { card, preview, pageMeta, readOnly, onOpenPage, onUpdate, compact, editing, onStartEditing, renderPageEditor } = data;
   const missing = !pageMeta;
   const title = pageMeta?.title || preview?.title || "제목 없는 문서";
   const icon = pageMeta?.icon ?? preview?.icon;
+  const isCanvas = pageMeta?.kind === "canvas";
+  const canEdit = !readOnly && !compact && !missing && !isCanvas && Boolean(renderPageEditor);
+  // 편집을 마칠 때마다 본문을 다시 받는다
+  const [editRound, setEditRound] = useState(0);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && !editing) setEditRound((n) => n + 1);
+    wasEditing.current = Boolean(editing);
+  }, [editing]);
+  const blocks = usePageBlocks(card.pageId, !compact && !missing && !isCanvas && !editing, editRound);
+  // 첫 블록은 카드 머리의 제목과 같으므로 본문에서는 뺀다
+  const body = blocks && blocks.length > 1 ? blocks.slice(1) : null;
   return (
     <div
-      className={`canvas-card canvas-card--page ${missing ? "canvas-card--missing" : ""}`}
-      onDoubleClick={() => !missing && card.pageId && onOpenPage(card.pageId)}
-      title={missing ? undefined : "더블클릭해서 열기"}
+      className={`canvas-card canvas-card--page ${missing ? "canvas-card--missing" : ""} ${editing ? "canvas-card--editing" : ""}`}
+      onDoubleClick={() => {
+        if (missing || !card.pageId || editing) return;
+        if (canEdit) onStartEditing?.(card);
+        else onOpenPage(card.pageId);
+      }}
+      title={missing || editing ? undefined : canEdit ? "더블클릭해서 카드 안에서 편집" : "더블클릭해서 열기"}
     >
       <Resizer selected={selected} readOnly={readOnly || Boolean(compact)} id={card.id} onUpdate={onUpdate} minWidth={160} minHeight={70} />
       <SideHandles hidden={readOnly || Boolean(compact)} />
       <div className="canvas-card__title">
-        <span className="canvas-card__icon">{icon || (pageMeta?.kind === "canvas" ? "🎨" : "📄")}</span>
-        <span>{missing ? "삭제된 페이지" : title}</span>
+        <span className="canvas-card__icon">{icon || (isCanvas ? "🎨" : "📄")}</span>
+        <span className="canvas-card__title-text">{missing ? "삭제된 페이지" : title}</span>
+        {!missing && !compact && card.pageId && (
+          <button
+            type="button"
+            className="canvas-card__open nodrag"
+            title="페이지로 열기"
+            aria-label="페이지로 열기"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenPage(card.pageId!);
+            }}
+          >
+            ↗
+          </button>
+        )}
       </div>
-      {!missing && preview?.excerpt && <div className="canvas-card__excerpt">{preview.excerpt}</div>}
-      {missing && <div className="canvas-card__excerpt">이 페이지는 휴지통에 있거나 삭제되었습니다.</div>}
+      {missing ? (
+        <div className="canvas-card__excerpt">이 페이지는 휴지통에 있거나 삭제되었습니다.</div>
+      ) : editing && card.pageId && renderPageEditor ? (
+        <div className="canvas-card__editor nodrag nowheel nopan nokey" onDoubleClick={(e) => e.stopPropagation()}>
+          {renderPageEditor(card.pageId)}
+        </div>
+      ) : body && !compact ? (
+        <div className="canvas-card__body nowheel">
+          <PreviewBlocks blocks={body as any[]} />
+        </div>
+      ) : (
+        preview?.excerpt && <div className="canvas-card__excerpt">{preview.excerpt}</div>
+      )}
     </div>
   );
 }
 
 function TextCardNode({ data, selected }: NodeProps<Node<CardData>>) {
-  const { card, readOnly, onUpdate, onConvertToPage, compact } = data;
+  const { card, readOnly, onUpdate, compact, onOpenPage, resolvePageByTitle } = data;
   const [editing, setEditing] = useState(!card.text && !readOnly && !compact);
   const [draft, setDraft] = useState(card.text ?? "");
   useEffect(() => {
@@ -143,19 +274,12 @@ function TextCardNode({ data, selected }: NodeProps<Node<CardData>>) {
     <div className="canvas-card canvas-card--text" onDoubleClick={() => !readOnly && !compact && setEditing(true)}>
       <Resizer selected={selected} readOnly={readOnly || Boolean(compact)} id={card.id} onUpdate={onUpdate} />
       <SideHandles hidden={readOnly || Boolean(compact)} />
-      {!readOnly && !compact && (
-        <NodeToolbar isVisible={selected && !editing} position={Position.Top}>
-          <button type="button" className="canvas-toolbar-btn" onClick={() => onConvertToPage(card)}>
-            페이지로 만들기
-          </button>
-        </NodeToolbar>
-      )}
       {editing ? (
         <textarea
           className="canvas-card__textarea nodrag nowheel"
           autoFocus
           value={draft}
-          placeholder="메모를 입력하세요"
+          placeholder={"메모를 입력하세요\n# 제목  - 목록  - [ ] 할 일  **굵게**  [[페이지]]"}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -164,7 +288,18 @@ function TextCardNode({ data, selected }: NodeProps<Node<CardData>>) {
           }}
         />
       ) : (
-        <div className="canvas-card__text">{card.text || <span className="canvas-card__placeholder">빈 메모</span>}</div>
+        <div className="canvas-card__text nowheel">
+          {card.text ? (
+            <CanvasMarkdown
+              source={card.text}
+              resolvePage={resolvePageByTitle}
+              onOpenPage={onOpenPage}
+              onToggleCheck={readOnly || compact ? undefined : (line) => onUpdate(card.id, { text: toggleCheckLine(card.text ?? "", line) })}
+            />
+          ) : (
+            <span className="canvas-card__placeholder">빈 메모 — 더블클릭해서 쓰기 (마크다운 지원)</span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -235,7 +370,7 @@ function GroupNode({ data, selected }: NodeProps<Node<CardData>>) {
 
 const NODE_TYPES = { page: PageCardNode, text: TextCardNode, image: ImageCardNode, link: LinkCardNode, group: GroupNode };
 
-function toFlowNodes(canvas: CanvasData, extra: Omit<CardData, "card" | "preview" | "pageMeta">, previews: Record<string, PagePreview>, pagesById: Map<string, PageItem>, selected: ReadonlySet<string>): Node<CardData>[] {
+function toFlowNodes(canvas: CanvasData, extra: Omit<CardData, "card" | "preview" | "pageMeta" | "editing"> & { editingCardId?: string | null }, previews: Record<string, PagePreview>, pagesById: Map<string, PageItem>, selected: ReadonlySet<string>): Node<CardData>[] {
   return canvas.nodes.map((card) => ({
     id: card.id,
     type: card.type,
@@ -245,11 +380,15 @@ function toFlowNodes(canvas: CanvasData, extra: Omit<CardData, "card" | "preview
     // 카드 크기는 정해져 있으므로 측정값도 같다. 이 값이 없으면 노드 객체가 새로 만들어질 때마다
     // React Flow 가 연결 손잡이 위치를 버리고 다시 재는데, 그 사이에 선이 안 그려지는 경우가 생긴다.
     measured: { width: card.width, height: card.height },
-    style: { width: card.width, height: card.height },
+    style: { width: card.width, height: card.height, ...(colorValue(card.color) ? { "--card-color": colorValue(card.color) } : {}) } as CSSProperties,
+    className: colorValue(card.color) ? "canvas-node--colored" : undefined,
     // 그룹은 다른 카드 뒤에 깔린다
     zIndex: card.type === "group" ? -1 : 1,
     selected: selected.has(card.id),
+    // 카드 안에서 편집 중이면 끌어서 옮기지 않는다 (글자 선택·드래그가 편집기로 가게)
+    draggable: extra.editingCardId === card.id ? false : undefined,
     data: {
+      editing: extra.editingCardId === card.id,
       ...extra,
       card,
       preview: card.pageId ? previews[card.pageId] : undefined,
@@ -259,17 +398,23 @@ function toFlowNodes(canvas: CanvasData, extra: Omit<CardData, "card" | "preview
 }
 
 function toFlowEdges(canvas: CanvasData, selected: ReadonlySet<string>): Edge[] {
-  return canvas.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.fromNode,
-    target: edge.toNode,
-    sourceHandle: edge.fromSide ?? "right",
-    targetHandle: edge.toSide ?? "left",
-    label: edge.label,
-    selected: selected.has(edge.id),
-    markerEnd: { type: MarkerType.ArrowClosed },
-    className: "canvas-edge",
-  }));
+  return canvas.edges.map((edge) => {
+    const color = colorValue(edge.color);
+    const marker = { type: MarkerType.ArrowClosed, ...(color ? { color } : {}) };
+    return {
+      id: edge.id,
+      source: edge.fromNode,
+      target: edge.toNode,
+      sourceHandle: edge.fromSide ?? "right",
+      targetHandle: edge.toSide ?? "left",
+      label: edge.label,
+      selected: selected.has(edge.id),
+      markerEnd: (edge.toEnd ?? "arrow") === "arrow" ? marker : undefined,
+      markerStart: edge.fromEnd === "arrow" ? marker : undefined,
+      style: color ? { stroke: color } : undefined,
+      className: "canvas-edge",
+    };
+  });
 }
 
 /** 캔버스 Yjs 문서를 열고 바뀔 때마다 CanvasData 로 읽는다. */
@@ -327,6 +472,8 @@ function usePagePreviews(pageIds: string[], refreshKey: unknown) {
 
 type CanvasEditorProps = {
   pageId: string;
+  /** 페이지 카드를 카드 안에서 편집할 때 띄울 편집기 */
+  renderPageEditor?: (pageId: string) => ReactNode;
   authSession: AuthSession;
   pages: PageItem[];
   pagesById: Map<string, PageItem>;
@@ -337,7 +484,7 @@ type CanvasEditorProps = {
   onRename: (title: string) => void;
 };
 
-function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenPage, onCreatePage, onRename }: CanvasEditorProps) {
+function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenPage, onCreatePage, onRename, renderPageEditor }: CanvasEditorProps) {
   const { doc, canvas, status } = useCanvasDocument(pageId, authSession);
   const flow = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -345,6 +492,8 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  // 카드 안에서 편집 중인 페이지 카드 (한 번에 하나만: 편집기는 무거워서)
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const self = pagesById.get(pageId);
   const [title, setTitle] = useState(self?.title ?? "");
   useEffect(() => setTitle(self?.title ?? ""), [self?.title]);
@@ -431,17 +580,87 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
     upsertCanvasNode(doc, card.id, { type: "page", pageId: id, text: undefined, height: Math.max(card.height, DEFAULT_SIZE.page.height) });
   };
 
-  const extra = { readOnly, onOpenPage, onUpdate: update, onConvertToPage: (card: CanvasNode) => void convertToPage(card) };
-  const nodes = useMemo(() => toFlowNodes(canvas, extra, previews, pagesById, selected), [canvas, previews, pagesById, selected, readOnly]);
+  const pageIdByTitle = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const page of pages) {
+      const key = (page.title || "").trim().toLowerCase();
+      if (key && !map.has(key)) map.set(key, page.id);
+    }
+    return map;
+  }, [pages]);
+
+  const startEditing = (card: CanvasNode) => {
+    // 편집하기 좋은 크기로 키운다 (이미 크면 그대로)
+    if (card.width < 420 || card.height < 320) {
+      upsertCanvasNode(doc, card.id, { width: Math.max(card.width, 420), height: Math.max(card.height, 320) });
+    }
+    setSelected(new Set([card.id]));
+    setEditingCardId(card.id);
+  };
+
+  const extra = {
+    readOnly,
+    onOpenPage,
+    onUpdate: update,
+    onConvertToPage: (card: CanvasNode) => void convertToPage(card),
+    editingCardId,
+    onStartEditing: startEditing,
+    renderPageEditor,
+    resolvePageByTitle: (title: string) => pageIdByTitle.get(title.trim().toLowerCase()),
+  };
+  const nodes = useMemo(
+    () => toFlowNodes(canvas, extra, previews, pagesById, selected),
+    [canvas, previews, pagesById, selected, readOnly, editingCardId, pageIdByTitle, renderPageEditor],
+  );
+  // 편집 중인 카드가 선택에서 빠지거나 지워지면 편집을 끝낸다
+  useEffect(() => {
+    if (editingCardId && (!selected.has(editingCardId) || !canvas.nodes.some((n) => n.id === editingCardId))) setEditingCardId(null);
+  }, [selected, canvas.nodes, editingCardId]);
+  useEffect(() => {
+    if (!editingCardId) return;
+    // 편집기(BlockNote)가 Esc 를 먼저 써 버리므로 캡처 단계에서 받는다. 슬래시 메뉴 등 편집기 메뉴가 열려 있으면 그 메뉴를 닫게 둔다.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || document.querySelector(".bn-suggestion-menu, .bn-grid-suggestion-menu")) return;
+      setEditingCardId(null);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [editingCardId]);
   const edges = useMemo(() => toFlowEdges(canvas, selected), [canvas, selected]);
+
+  // 그룹을 끌기 시작할 때 그 안에 완전히 들어 있던 카드 (끄는 동안 지나치는 카드는 따라오지 않게 시작할 때 정한다)
+  const groupCargoRef = useRef<Set<string>>(new Set());
+  const onNodeDragStart = (_event: unknown, _node: Node, dragged: Node[]) => {
+    const groupIds = new Set(dragged.filter((n) => n.type === "group").map((n) => n.id));
+    const cargo = cardsInsideGroups(canvas.nodes, groupIds);
+    // 함께 선택돼 이미 같이 끌리는 카드는 빼야 두 번 움직이지 않는다
+    for (const n of dragged) cargo.delete(n.id);
+    groupCargoRef.current = cargo;
+  };
+  const onNodeDragStop = () => {
+    groupCargoRef.current = new Set();
+  };
 
   const onNodesChange = (changes: NodeChange<Node<CardData>>[]) => {
     const nextSelected = new Set(selected);
     let selectionChanged = false;
+    const byId = new Map(canvas.nodes.map((n) => [n.id, n]));
     doc.transact(() => {
       for (const change of changes) {
         if (change.type === "position" && change.position && !readOnly) {
-          upsertCanvasNode(doc, change.id, { x: Math.round(change.position.x), y: Math.round(change.position.y) });
+          const x = Math.round(change.position.x);
+          const y = Math.round(change.position.y);
+          const before = byId.get(change.id);
+          if (before?.type === "group" && groupCargoRef.current.size > 0 && (x !== before.x || y !== before.y)) {
+            const dx = x - before.x;
+            const dy = y - before.y;
+            const inside = cardsInsideGroups(canvas.nodes, new Set([change.id]));
+            for (const id of groupCargoRef.current) {
+              const card = byId.get(id);
+              if (card && inside.has(id)) upsertCanvasNode(doc, id, { x: card.x + dx, y: card.y + dy });
+            }
+          }
+          upsertCanvasNode(doc, change.id, { x, y });
         } else if (change.type === "select") {
           selectionChanged = true;
           if (change.selected) nextSelected.add(change.id);
@@ -476,6 +695,40 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
       toNode: connection.target,
       fromSide: (connection.sourceHandle as CanvasSide) || "right",
       toSide: (connection.targetHandle as CanvasSide) || "left",
+    });
+  };
+
+  const renameEdge = (edge: CanvasEdge) => {
+    if (readOnly) return;
+    const label = window.prompt("연결선 이름 (비우면 없앰)", edge.label ?? "");
+    if (label !== null) upsertCanvasEdge(doc, edge.id, { label: label.trim() || undefined });
+  };
+
+  // 선택 도구 모음: 고른 카드·선에 한꺼번에 적용한다
+  const selectedCards = canvas.nodes.filter((n) => selected.has(n.id));
+  const selectedEdges = canvas.edges.filter((e) => selected.has(e.id));
+  const sharedValue = <T,>(values: T[]) => (values.length > 0 && values.every((v) => v === values[0]) ? values[0] : undefined);
+  const setCardsColor = (color: string | undefined) =>
+    doc.transact(() => selectedCards.forEach((card) => upsertCanvasNode(doc, card.id, { color })));
+  const setEdgesPatch = (patch: Partial<CanvasEdge>) =>
+    doc.transact(() => selectedEdges.forEach((edge) => upsertCanvasEdge(doc, edge.id, patch)));
+
+  /** 연결선을 빈 곳에 놓으면 그 자리에 메모를 만들고 잇는다 */
+  const onConnectEnd = (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+    if (readOnly || state.isValid || !state.fromNode) return;
+    const target = event.target as HTMLElement | null;
+    if (!target?.classList.contains("react-flow__pane")) return;
+    const point = "changedTouches" in event ? event.changedTouches[0] : event;
+    const p = flow.screenToFlowPosition({ x: point.clientX, y: point.clientY });
+    const fromSide = (state.fromHandle?.id as CanvasSide) || "right";
+    const toSide = OPPOSITE_SIDE[fromSide];
+    const { width, height } = DEFAULT_SIZE.text;
+    // 새 메모의 연결 쪽 가운데가 놓은 자리에 오게
+    const x = toSide === "left" ? p.x : toSide === "right" ? p.x - width : p.x - width / 2;
+    const y = toSide === "top" ? p.y : toSide === "bottom" ? p.y - height : p.y - height / 2;
+    doc.transact(() => {
+      const id = addCard({ type: "text", text: "", x: Math.round(x), y: Math.round(y) });
+      upsertCanvasEdge(doc, newId(), { fromNode: state.fromNode!.id, toNode: id, fromSide, toSide });
     });
   };
 
@@ -554,12 +807,17 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
+        onPaneClick={() => setEditingCardId(null)}
         onEdgeDoubleClick={(_event, edge) => {
-          if (readOnly) return;
-          const label = window.prompt("연결선 이름 (비우면 없앰)", typeof edge.label === "string" ? edge.label : "");
-          if (label !== null) upsertCanvasEdge(doc, edge.id, { label: label.trim() || undefined });
+          const target = canvas.edges.find((e) => e.id === edge.id);
+          if (target) renameEdge(target);
         }}
         connectionMode={ConnectionMode.Loose}
+        // 선택한 카드를 위로 올리지 않는다: 그룹을 선택해도 안의 카드를 계속 누를 수 있게
+        elevateNodesOnSelect={false}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
@@ -571,6 +829,62 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} size={1} />
+        {!readOnly && selectedCards.length > 0 && !editingCardId && (
+          <NodeToolbar nodeId={selectedCards.map((c) => c.id)} isVisible position={Position.Top} offset={12} className="canvas-selection-toolbar">
+            <ColorSwatches value={sharedValue(selectedCards.map((c) => c.color))} onChange={setCardsColor} />
+            {selectedCards.length === 1 && selectedCards[0].type === "text" && (
+              <button type="button" className="canvas-toolbar-btn" onClick={() => void convertToPage(selectedCards[0])}>
+                페이지로 만들기
+              </button>
+            )}
+            <button
+              type="button"
+              className="canvas-toolbar-btn canvas-toolbar-btn--danger"
+              title="카드 지우기 (페이지는 지워지지 않습니다)"
+              onClick={() => removeCanvasNodes(doc, selectedCards.map((c) => c.id))}
+            >
+              지우기
+            </button>
+          </NodeToolbar>
+        )}
+        {!readOnly && selectedEdges.length > 0 && (
+          <Panel position="bottom-center" className="canvas-selection-toolbar canvas-edge-toolbar">
+            <span className="canvas-edge-toolbar__label">연결선</span>
+            <ColorSwatches value={sharedValue(selectedEdges.map((e) => e.color))} onChange={(color) => setEdgesPatch({ color })} />
+            <div className="canvas-segmented" role="group" aria-label="화살표">
+              {(
+                [
+                  ["none", "─", "화살표 없음"],
+                  ["forward", "→", "한쪽 화살표"],
+                  ["both", "↔", "양쪽 화살표"],
+                ] as const
+              ).map(([direction, symbol, label]) => {
+                const active = sharedValue(selectedEdges.map(edgeDirection)) === direction;
+                return (
+                  <button
+                    key={direction}
+                    type="button"
+                    className={`canvas-segmented__btn ${active ? "canvas-segmented__btn--active" : ""}`}
+                    aria-label={label}
+                    aria-pressed={active}
+                    title={label}
+                    onClick={() => setEdgesPatch(DIRECTION_ENDS[direction])}
+                  >
+                    {symbol}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedEdges.length === 1 && (
+              <button type="button" className="canvas-toolbar-btn" onClick={() => renameEdge(selectedEdges[0])}>
+                이름
+              </button>
+            )}
+            <button type="button" className="canvas-toolbar-btn canvas-toolbar-btn--danger" onClick={() => removeCanvasEdges(doc, selectedEdges.map((e) => e.id))}>
+              지우기
+            </button>
+          </Panel>
+        )}
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable className="canvas-minimap" />
         <Panel position="top-left" className="canvas-toolbar">
@@ -651,7 +965,7 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
           <Panel position="top-center" className="canvas-empty-hint">
             {readOnly
               ? "빈 캔버스입니다."
-              : "빈 곳을 더블클릭해 메모를 만들거나, 사이드바의 페이지를 끌어다 놓으세요. 카드 가장자리를 끌면 선으로 이어집니다."}
+              : "빈 곳을 더블클릭해 메모를 만들거나, 사이드바의 페이지를 끌어다 놓으세요. 카드 가장자리를 끌어 다른 카드나 빈 곳에 놓으면 선으로 이어집니다."}
           </Panel>
         )}
       </ReactFlow>

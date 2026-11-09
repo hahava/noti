@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
 import {
+  canvasMaps,
   canvasPageIds,
+  cardsInsideGroups,
   readCanvas,
   removeCanvasNodes,
   resolveNewPageParent,
@@ -68,4 +70,30 @@ test("new page location: same as canvas by default, root, chosen page, or fallba
   assert.equal(resolveNewPageParent(readCanvas(doc).settings, "proj", new Set(["proj"])), "proj");
   setCanvasNewPageParent(doc, undefined);
   assert.equal(resolveNewPageParent(readCanvas(doc).settings, null, live), null);
+});
+
+test("edge ends and colors round-trip, invalid ends are ignored", () => {
+  const doc = new Y.Doc();
+  upsertCanvasNode(doc, "a", { type: "text", x: 0, y: 0, width: 10, height: 10 });
+  upsertCanvasNode(doc, "b", { type: "text", x: 50, y: 0, width: 10, height: 10 });
+  upsertCanvasEdge(doc, "e", { fromNode: "a", toNode: "b", fromEnd: "arrow", toEnd: "none", color: "3" });
+  assert.deepEqual(
+    (({ fromEnd, toEnd, color }) => ({ fromEnd, toEnd, color }))(readCanvas(doc).edges[0]),
+    { fromEnd: "arrow", toEnd: "none", color: "3" },
+  );
+  canvasMaps(doc).edges.get("e")!.set("toEnd", "bogus");
+  assert.equal(readCanvas(doc).edges[0].toEnd, undefined);
+});
+
+test("cardsInsideGroups: only cards fully inside the dragged groups", () => {
+  const card = (id: string, x: number, y: number, w = 10, h = 10, type: "text" | "group" = "text") => ({ id, type, x, y, width: w, height: h });
+  const nodes = [
+    card("g", 0, 0, 100, 100, "group"),
+    card("inner", 10, 10),
+    card("half", 95, 10),
+    card("outside", 200, 200),
+    card("subgroup", 20, 20, 30, 30, "group"),
+  ];
+  assert.deepEqual([...cardsInsideGroups(nodes, new Set(["g"]))].sort(), ["inner", "subgroup"]);
+  assert.equal(cardsInsideGroups(nodes, new Set()).size, 0);
 });

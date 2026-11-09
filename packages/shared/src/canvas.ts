@@ -13,6 +13,10 @@ import * as Y from "yjs";
 
 export type CanvasNodeType = "page" | "text" | "image" | "link" | "group";
 export type CanvasSide = "top" | "right" | "bottom" | "left";
+/** 연결선 끝 모양 (JSON Canvas: 기본 fromEnd = none, toEnd = arrow) */
+export type CanvasEnd = "none" | "arrow";
+/** 미리 정한 색 "1"~"6" (빨강·주황·노랑·초록·청록·보라, JSON Canvas 와 같음) */
+export const CANVAS_PRESET_COLORS = ["1", "2", "3", "4", "5", "6"] as const;
 
 export interface CanvasNode {
   id: string;
@@ -38,7 +42,10 @@ export interface CanvasEdge {
   toNode: string;
   fromSide?: CanvasSide;
   toSide?: CanvasSide;
+  fromEnd?: CanvasEnd;
+  toEnd?: CanvasEnd;
   label?: string;
+  color?: string;
 }
 
 export interface CanvasSettings {
@@ -96,6 +103,8 @@ function readNode(id: string, map: Y.Map<unknown>): CanvasNode | null {
   };
 }
 
+const end = (value: unknown): CanvasEnd | undefined => (value === "none" || value === "arrow" ? value : undefined);
+
 function readEdge(id: string, map: Y.Map<unknown>): CanvasEdge | null {
   const fromNode = str(map.get("fromNode"));
   const toNode = str(map.get("toNode"));
@@ -108,7 +117,10 @@ function readEdge(id: string, map: Y.Map<unknown>): CanvasEdge | null {
     toNode,
     fromSide: fromSide && SIDES.has(fromSide as CanvasSide) ? (fromSide as CanvasSide) : undefined,
     toSide: toSide && SIDES.has(toSide as CanvasSide) ? (toSide as CanvasSide) : undefined,
+    fromEnd: end(map.get("fromEnd")),
+    toEnd: end(map.get("toEnd")),
     label: str(map.get("label")),
+    color: str(map.get("color")),
   };
 }
 
@@ -212,4 +224,27 @@ export function resolveNewPageParent(settings: CanvasSettings, canvasParentId: s
 /** 캔버스에 카드로 올라간 페이지 id (그래프의 캔버스 → 페이지 링크) */
 export function canvasPageIds(data: CanvasData): string[] {
   return [...new Set(data.nodes.filter((node) => node.type === "page" && node.pageId).map((node) => node.pageId!))];
+}
+
+/**
+ * 그룹 안에 완전히 들어 있는 카드 id (그룹을 옮길 때 함께 옮길 카드).
+ * 안쪽의 작은 그룹도 포함한다. groupIds 에 든 그룹끼리는 서로 넣지 않는다 (함께 끌리는 중이므로).
+ */
+export function cardsInsideGroups(nodes: readonly CanvasNode[], groupIds: ReadonlySet<string>): Set<string> {
+  const inside = new Set<string>();
+  for (const group of nodes) {
+    if (group.type !== "group" || !groupIds.has(group.id)) continue;
+    for (const node of nodes) {
+      if (node.id === group.id || groupIds.has(node.id)) continue;
+      if (
+        node.x >= group.x &&
+        node.y >= group.y &&
+        node.x + node.width <= group.x + group.width &&
+        node.y + node.height <= group.y + group.height
+      ) {
+        inside.add(node.id);
+      }
+    }
+  }
+  return inside;
 }

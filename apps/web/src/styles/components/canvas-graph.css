@@ -509,3 +509,292 @@
   color: var(--ds-text-muted);
   font-size: var(--ds-text-xs);
 }
+
+/* ==========================================================================
+ * 캔버스: 페이지 카드 본문·카드 안 편집, 마크다운 메모
+ * ========================================================================== */
+.canvas-card--page {
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-card__title-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-card__open {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--ds-radius-xs);
+  background: none;
+  color: var(--ds-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.canvas-card:hover .canvas-card__open,
+.canvas-card__open:focus-visible {
+  opacity: 1;
+}
+
+.canvas-card__open:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-strong);
+}
+
+.canvas-card__body {
+  flex: 1;
+  min-height: 0;
+  margin-top: 6px;
+  overflow: auto;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-card__body .page-history__line {
+  font-size: var(--ds-text-xs);
+}
+
+.canvas-card__body .page-history__line--h1 { font-size: 1.05rem; }
+.canvas-card__body .page-history__line--h2 { font-size: 0.95rem; }
+.canvas-card__body .page-history__line--h3 { font-size: 0.875rem; }
+
+/* 카드 안 편집: 카드 크기에 맞춰 편집기를 채운다 */
+.canvas-card--editing {
+  padding-bottom: 0;
+  cursor: auto;
+}
+
+.react-flow__node.selected .canvas-card--editing {
+  border-color: var(--ds-color-accent);
+}
+
+.canvas-card__editor {
+  flex: 1;
+  min-height: 0;
+  margin: 6px -12px 0;
+  overflow: auto;
+  cursor: text;
+}
+
+.canvas-card__editor .page {
+  min-height: 0;
+  padding: 0;
+}
+
+.canvas-card__editor .page__content {
+  width: 100%;
+  max-width: none;
+  padding: 0 0 24px;
+}
+
+.canvas-card__editor .bn-editor {
+  padding-inline: 12px;
+  font-size: var(--ds-text-sm);
+}
+
+/* 마크다운 메모 */
+.canvas-md {
+  white-space: normal;
+}
+
+.canvas-md h1,
+.canvas-md h2,
+.canvas-md h3 {
+  margin: 4px 0 4px;
+  color: var(--ds-text-strong);
+  line-height: 1.3;
+}
+
+.canvas-md h1 { font-size: 1.2rem; }
+.canvas-md h2 { font-size: 1.05rem; }
+.canvas-md h3 { font-size: 0.95rem; }
+
+.canvas-md p {
+  margin: 0;
+}
+
+.canvas-md__blank {
+  height: 0.6em;
+}
+
+.canvas-md__item {
+  display: flex;
+  gap: 6px;
+}
+
+.canvas-md__marker {
+  flex-shrink: 0;
+  min-width: 12px;
+  color: var(--ds-text-muted);
+}
+
+.canvas-md__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.canvas-md__check input {
+  margin-top: 3px;
+}
+
+.canvas-md__check--done span {
+  color: var(--ds-text-subtle);
+  text-decoration: line-through;
+}
+
+.canvas-md blockquote {
+  margin: 2px 0;
+  padding-left: 8px;
+  border-left: 3px solid var(--ds-border-default);
+  color: var(--ds-text-muted);
+}
+
+.canvas-md pre,
+.canvas-md code {
+  border-radius: var(--ds-radius-xs);
+  background: var(--ds-bg-code);
+  font-family: var(--ds-font-mono);
+  font-size: 0.9em;
+}
+
+.canvas-md code {
+  padding: 1px 4px;
+}
+
+.canvas-md pre {
+  margin: 4px 0;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+}
+
+.canvas-md a,
+.canvas-md__wikilink {
+  color: var(--ds-color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.canvas-md__wikilink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-md__wikilink--missing {
+  color: var(--ds-text-subtle);
+  text-decoration-style: dashed;
+  cursor: default;
+}
+
+/* ==========================================================================
+ * 캔버스: 색, 선택 도구 모음
+ * ========================================================================== */
+.react-flow__node.canvas-node--colored .canvas-card {
+  border-color: var(--card-color);
+  background: color-mix(in srgb, var(--card-color) 9%, var(--ds-bg-surface));
+}
+
+.react-flow__node.canvas-node--colored .canvas-group {
+  border-color: var(--card-color);
+  background: color-mix(in srgb, var(--card-color) 7%, transparent);
+}
+
+.react-flow__node.canvas-node--colored .canvas-group__label {
+  color: var(--card-color);
+}
+
+.react-flow__node.canvas-node--colored.selected .canvas-card {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--card-color) 35%, transparent);
+}
+
+.canvas-selection-toolbar {
+  padding: 4px 6px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-popover);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-edge-toolbar__label {
+  padding: 0 4px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.canvas-swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+  border-right: 1px solid var(--ds-border-subtle);
+}
+
+.canvas-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--ds-radius-circle);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.canvas-swatch--none {
+  background:
+    linear-gradient(135deg, transparent 45%, #e03e3e 45%, #e03e3e 55%, transparent 55%),
+    var(--ds-bg-surface);
+}
+
+.canvas-swatch--active {
+  border-color: var(--ds-bg-surface);
+  box-shadow: 0 0 0 2px var(--ds-text-strong);
+}
+
+.canvas-swatch:focus-visible {
+  outline: 2px solid var(--ds-color-accent);
+  outline-offset: 2px;
+}
+
+.canvas-segmented {
+  display: flex;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-sm);
+  overflow: hidden;
+}
+
+.canvas-segmented__btn {
+  min-width: 28px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--ds-text-muted);
+  cursor: pointer;
+}
+
+.canvas-segmented__btn + .canvas-segmented__btn {
+  border-left: 1px solid var(--ds-border-default);
+}
+
+.canvas-segmented__btn--active {
+  background: var(--ds-bg-active);
+  color: var(--ds-text-strong);
+}
+
+.canvas-toolbar-btn--danger {
+  color: #c93c37;
+}
