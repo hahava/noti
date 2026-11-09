@@ -50,6 +50,7 @@ import {
   verifySetupCode,
   type SetupPlan,
 } from "./setup.js";
+import { getUpgradeInfo, startUpgrade } from "./upgrade.js";
 
 /**
  * Noty 어드민 서버 (메인 앱과 다른 포트)
@@ -338,6 +339,21 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     });
     return;
   }
+  /* ---- 업데이트 ---- */
+  if (method === "GET" && pathname === "/api/upgrade") {
+    sendJson(res, 200, await getUpgradeInfo(url.searchParams.get("refresh") === "1"));
+    return;
+  }
+  if (method === "POST" && pathname === "/api/upgrade") {
+    const body = await readJsonBody<{ version?: string; backup?: boolean }>(req);
+    try {
+      sendJson(res, 202, { job: await startUpgrade(String(body.version || ""), body.backup !== false) });
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : "업데이트를 시작하지 못했습니다.");
+    }
+    return;
+  }
+
   if (method === "POST" && pathname === "/api/indexing/reindex") {
     await requestFullReindex();
     sendJson(res, 200, await getIndexingStatus());

@@ -284,3 +284,85 @@ export async function containerLogs(name: string, tail = 30): Promise<string> {
   }
   return (out.join("") || body.toString("utf8")).trim();
 }
+
+/* ------------------------------------------------------------------ 업데이트용 */
+
+/** 컨테이너 전체 정보 (없으면 null) */
+export async function inspectContainerRaw(name: string): Promise<Record<string, any> | null> {
+  const { status, body } = await request(`/containers/${encodeURIComponent(name)}/json`);
+  if (status === 404) return null;
+  if (status >= 400) throw new DockerError(body.toString("utf8"), status);
+  return JSON.parse(body.toString("utf8"));
+}
+
+/** 이미지 정보 (없으면 null) */
+export async function inspectImage(image: string): Promise<Record<string, any> | null> {
+  const { status, body } = await request(`/images/${encodeURIComponent(image)}/json`);
+  if (status === 404) return null;
+  if (status >= 400) throw new DockerError(body.toString("utf8"), status);
+  return JSON.parse(body.toString("utf8"));
+}
+
+async function expectOk(path: string, method = "POST", okStatuses: number[] = []): Promise<void> {
+  const { status, body } = await request(path, { method, timeoutMs: 60_000 });
+  if (status >= 400 && !okStatuses.includes(status)) throw new DockerError(body.toString("utf8"), status);
+}
+
+export const stopContainer = (name: string) => expectOk(`/containers/${encodeURIComponent(name)}/stop?t=20`, "POST", [304, 404]);
+export const startContainer = (name: string) => expectOk(`/containers/${encodeURIComponent(name)}/start`, "POST", [304]);
+export const renameContainer = (name: string, next: string) =>
+  expectOk(`/containers/${encodeURIComponent(name)}/rename?name=${encodeURIComponent(next)}`);
+
+/** Docker API 형식 그대로 컨테이너를 만든다 (기존 컨테이너 설정을 옮겨 만들 때) */
+export async function createContainerRaw(name: string, body: Record<string, unknown>): Promise<void> {
+  await json(`/containers/create?name=${encodeURIComponent(name)}`, { method: "POST", body });
+}
+
+/**
+ * 컨테이너 안에서 명령을 실행하고 표준 출력을 파일로 받는다 (pg_dump 등).
+ * 표준 에러는 모아 두었다가 실패하면 메시지로 돌려준다.
+ */
+export async function execToFile(container: string, cmd: string[], filePath: string): Promise<void> {
+  const { createWriteStream } = await import("node:fs");
+  const exec = await json<{ Id: string }>(`/containers/${encodeURIComponent(container)}/exec`, {
+    method: "POST",
+    body: { AttachStdout: true, AttachStderr: true, Cmd: cmd },
+  });
+  const out = createWriteStream(filePath, { mode: 0o600 });
+  const stderr: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const payload = Buffer.from(JSON.stringify({ Detach: false, Tty: false }));
+    const req = http.request(
+      {
+        socketPath: SOCKET_PATH,
+        path: `${API}/exec/${exec.Id}/start`,
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": String(payload.length) },
+      },
+      (res) => {
+        // 다중화 스트림: [종류(1=stdout,2=stderr), 0,0,0, 크기(4바이트)] + 내용
+        let pending = Buffer.alloc(0);
+        res.on("data", (chunk: Buffer) => {
+          pending = Buffer.concat([pending, chunk]);
+          while (pending.length >= 8) {
+            const size = pending.readUInt32BE(4);
+            if (pending.length < 8 + size) break;
+            const frame = pending.subarray(8, 8 + size);
+            if (pending[0] === 2) stderr.push(Buffer.from(frame));
+            else out.write(frame);
+            pending = pending.subarray(8 + size);
+          }
+        });
+        res.on("end", () => out.end(resolve));
+        res.on("error", reject);
+      },
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+  const result = await json<{ ExitCode: number | null }>(`/exec/${exec.Id}/json`);
+  if (result.ExitCode !== 0) {
+    throw new DockerError(Buffer.concat(stderr).toString("utf8").trim() || `명령이 실패했습니다 (종료 코드 ${result.ExitCode})`);
+  }
+}

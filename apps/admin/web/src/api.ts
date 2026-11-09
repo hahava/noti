@@ -208,6 +208,31 @@ export const setupApi = {
   job: () => setupRequest<{ job: SetupJob | null; setupRequired: boolean }>("/api/setup/job"),
 };
 
+/* ---- 업데이트 ---- */
+
+export interface UpgradeJob {
+  status: "running" | "done" | "failed";
+  targetVersion: string;
+  steps: { key: string; label: string; status: SetupStepStatus; detail?: string }[];
+  log: string[];
+  error?: string;
+}
+
+export interface UpgradeInfo {
+  supported: boolean;
+  reason: string | null;
+  currentVersion: string | null;
+  adminVersion: string | null;
+  latestVersion: string | null;
+  versions: string[];
+  notes: { version: string; name: string; body: string; url: string; publishedAt: string }[];
+  checkError: string | null;
+  lastUpgrade: { from: string | null; to: string; at: string } | null;
+  backups: string[];
+  databaseBackup: boolean;
+  job: UpgradeJob | null;
+}
+
 export const adminApi = {
   login: (username: string, password: string) =>
     request<{ token: string; user: AdminUser }>("/api/auth/login", { method: "POST", body: json({ username, password }) }),
@@ -237,6 +262,9 @@ export const adminApi = {
     request<{ models: ModelInfo[]; message?: string }>("/api/models", { method: "POST", body: json(payload) }),
 
   status: () => request<AdminStatus>("/api/status"),
+  upgradeInfo: (refresh = false) => request<UpgradeInfo>(`/api/upgrade${refresh ? "?refresh=1" : ""}`),
+  startUpgrade: (version: string, backup: boolean) =>
+    request<{ job: UpgradeJob }>("/api/upgrade", { method: "POST", body: json({ version, backup }) }),
   reindex: () => request<unknown>("/api/indexing/reindex", { method: "POST" }),
   regenerateDigests: () => request<unknown>("/api/digests/regenerate", { method: "POST" }),
 };

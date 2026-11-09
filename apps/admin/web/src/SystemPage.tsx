@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi, type AdminStatus, type SystemConfig } from "./api";
+import { UpgradeCard } from "./UpgradeCard";
 
 type Message = { ok: boolean; text: string } | null;
 
@@ -66,6 +67,8 @@ export function SystemPage() {
           <p className="hint">{status.database.version.split(" on ")[0]} · 어드민 {status.admin.host}:{status.admin.port}</p>
         </section>
       )}
+
+      <UpgradeCard />
 
       <section className="card">
         <h3>파일 스토리지</h3>

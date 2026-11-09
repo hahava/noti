@@ -44,7 +44,7 @@ const POSTGRES_IMAGE = "noty-postgres:pg17-pgroonga";
 const OLLAMA_IMAGE = "ollama/ollama:0.40.0";
 // 컨테이너·볼륨·네트워크 이름 앞부분. 검사 스크립트처럼 실제 설치와 겹치면 안 될 때 NOTY_RESOURCE_PREFIX 로 바꾼다.
 const PREFIX = (process.env.NOTY_RESOURCE_PREFIX || "noty").replace(/[^a-z0-9]/g, "") || "noty";
-const NAMES = { db: `${PREFIX}-db`, ollama: `${PREFIX}-ollama`, api: `${PREFIX}-api`, collab: `${PREFIX}-collab` };
+export const NAMES = { db: `${PREFIX}-db`, ollama: `${PREFIX}-ollama`, api: `${PREFIX}-api`, collab: `${PREFIX}-collab` };
 const VOLUMES = { db: `${PREFIX}_pgdata`, ollama: `${PREFIX}_ollama`, data: `${PREFIX}_data` };
 const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
 
@@ -719,7 +719,7 @@ async function replaceManagedContainer(name: string, log: (line: string) => void
   await removeContainer(name);
 }
 
-async function waitFor(check: () => Promise<boolean>, timeoutMs: number, message: string, diagnostics?: () => Promise<string>): Promise<void> {
+export async function waitFor(check: () => Promise<boolean>, timeoutMs: number, message: string, diagnostics?: () => Promise<string>): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
