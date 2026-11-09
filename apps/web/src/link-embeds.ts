@@ -75,3 +75,22 @@ export function safeHttpUrl(raw: string | undefined): string | null {
   if (!raw) return null;
   return parse(raw)?.toString() ?? null;
 }
+
+/**
+ * 붙여 넣은 링크를 북마크·임베드로 바꿀 때: 문단 내용에서 그 링크(마지막 것)를 뺀 결과.
+ * onlyLink 는 링크를 빼고 나면 글자가 남지 않는지 (그러면 문단을 통째로 블록으로 바꾼다).
+ */
+export function removePastedLink(content: unknown, url: string): { content: unknown[]; onlyLink: boolean } {
+  const items = Array.isArray(content) ? [...content] : [];
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i] as { type?: string; href?: string };
+    if (item?.type === "link" && item.href === url) {
+      items.splice(i, 1);
+      break;
+    }
+  }
+  const text = items
+    .map((item: any) => (typeof item === "string" ? item : typeof item?.text === "string" ? item.text : Array.isArray(item?.content) ? item.content.map((c: any) => c?.text ?? "").join("") : ""))
+    .join("");
+  return { content: items, onlyLink: text.trim() === "" };
+}

@@ -210,3 +210,41 @@
   border: 0;
   display: block;
 }
+
+/* 링크 붙여 넣기 메뉴 */
+.noty-paste-menu {
+  position: fixed;
+  z-index: 70;
+  width: 240px;
+  padding: 4px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-surface);
+  box-shadow: var(--ds-shadow-menu);
+  display: flex;
+  flex-direction: column;
+}
+
+.noty-paste-menu__item {
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: none;
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  cursor: pointer;
+}
+
+.noty-paste-menu__item--active {
+  background: var(--ds-bg-hover);
+}
+
+.noty-paste-menu__hint {
+  color: var(--ds-text-subtle);
+  font-size: var(--ds-text-xs);
+}

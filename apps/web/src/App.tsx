@@ -41,7 +41,8 @@ import {
 } from "@blocknote/xl-multi-column";
 import { BlockNoteView } from "@blocknote/mantine";
 import { PageHistoryModal, PreviewBlocks } from "./PageHistory";
-import { createBookmarkBlockSpec, createEmbedBlockSpec, createTocBlockSpec, getLinkBlockSlashMenuItems } from "./LinkBlocks";
+import { LinkPasteMenu, createBookmarkBlockSpec, createEmbedBlockSpec, createTocBlockSpec, getLinkBlockSlashMenuItems, type LinkPasteState } from "./LinkBlocks";
+import { safeHttpUrl } from "./link-embeds";
 import { TemplatePanel, TemplateSaveDialog, TemplateSvgIcon } from "./TemplatePanel";
 import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, type PageTemplate } from "./templates";
 import type { UserTemplateRecord } from "./api";
@@ -1259,6 +1260,8 @@ function EditorPane({
   // 협업 서버가 이 문서 접속을 거부하면, 빈 Yjs 문서로 편집하다가 DB 본문을 덮어쓰지 않도록
   // 협업 없이 DB 본문(initialContent)으로 편집기를 다시 연다.
   const [collaborationRejectedPageId, setCollaborationRejectedPageId] = useState<string | null>(null);
+  // 웹 주소를 붙여 넣은 직후 띄우는 "링크 / 북마크 / 임베드" 메뉴
+  const [linkPaste, setLinkPaste] = useState<LinkPasteState | null>(null);
   const collaborationRejected = collaborationRejectedPageId === pageId;
   const collaborationProvider = useMemo(() => {
     if (!collaborationEnabled || collaborationRejected) return null;
@@ -1359,6 +1362,24 @@ function EditorPane({
             },
             " ",
           ] as any);
+          return true;
+        }
+        // 웹 주소 하나만 붙여 넣으면 링크로 넣고, 북마크·임베드로 바꿀지 고르는 메뉴를 띄운다
+        const pastedUrl = /^\S+$/.test(plain.trim()) ? safeHttpUrl(plain.trim()) : null;
+        const cursorBlock = (() => {
+          try {
+            return currentEditor.getTextCursorPosition().block;
+          } catch {
+            return null;
+          }
+        })();
+        if (pastedUrl && cursorBlock && cursorBlock.type !== "codeBlock" && window.getSelection()?.isCollapsed !== false) {
+          currentEditor.insertInlineContent([{ type: "link", href: pastedUrl, content: pastedUrl }, " "] as any);
+          requestAnimationFrame(() => {
+            const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null;
+            const rect = range?.getBoundingClientRect();
+            if (rect) setLinkPaste({ blockId: cursorBlock.id, url: pastedUrl, x: rect.left, y: rect.bottom });
+          });
           return true;
         }
         return defaultPasteHandler();
@@ -1788,6 +1809,7 @@ function EditorPane({
           읽기 전용 계정입니다. 페이지를 보고 AI에게 질문할 수 있지만, 수정·이동·삭제는 할 수 없습니다.
         </div>
       )}
+      {linkPaste && !readOnly && <LinkPasteMenu editor={editor} state={linkPaste} onClose={() => setLinkPaste(null)} />}
       {isHistoryOpen && (
         <PageHistoryModal pageId={pageId} editor={editor} readOnly={readOnly} onClose={onCloseHistory} />
       )}

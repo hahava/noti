@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
 import { createReactBlockSpec, useEditorChange, type DefaultReactSuggestionItem } from "@blocknote/react";
 import { workspaceApi } from "./api";
-import { EMBED_PROVIDERS, safeHttpUrl, toEmbed } from "./link-embeds";
+import { EMBED_PROVIDERS, removePastedLink, safeHttpUrl, toEmbed } from "./link-embeds";
 
 /**
  * 목차 · 북마크 · 임베드 블록
@@ -257,4 +257,104 @@ export function getLinkBlockSlashMenuItems(editor: any): DefaultReactSuggestionI
       onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: "embed" } as any),
     },
   ];
+}
+
+/* ------------------------------------------------------------------ 링크 붙여 넣기 메뉴 */
+
+export interface LinkPasteState {
+  blockId: string;
+  url: string;
+  /** 화면 좌표 (커서 아래) */
+  x: number;
+  y: number;
+}
+
+/** 붙여 넣은 링크를 북마크·임베드 블록으로 바꾼다. 문단에 링크만 있었으면 문단을 통째로 바꾼다. */
+export function convertPastedLink(editor: any, state: LinkPasteState, type: "bookmark" | "embed"): void {
+  const block = editor.getBlock(state.blockId);
+  if (!block) return;
+  const next = { type, props: { url: state.url } };
+  const { content, onlyLink } = removePastedLink(block.content, state.url);
+  editor.transact(() => {
+    if (block.type === "paragraph" && onlyLink) {
+      editor.replaceBlocks([block], [next]);
+      return;
+    }
+    editor.updateBlock(block, { content });
+    editor.insertBlocks([next], block, "after");
+  });
+}
+
+/**
+ * 웹 주소를 붙여 넣으면 커서 아래에 뜨는 메뉴: 링크로 두기 / 북마크 / 임베드(지원하는 주소만).
+ * 다른 키를 누르거나 다른 곳을 누르면 링크로 둔 채 닫힌다.
+ */
+export function LinkPasteMenu({ editor, state, onClose }: { editor: any; state: LinkPasteState; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const embed = toEmbed(state.url);
+  const options: { key: string; label: string; hint: string; run: () => void }[] = [
+    { key: "link", label: "링크로 두기", hint: "Esc", run: () => undefined },
+    { key: "bookmark", label: "북마크", hint: "제목·설명·이미지 카드", run: () => convertPastedLink(editor, state, "bookmark") },
+    ...(embed ? [{ key: "embed", label: "임베드", hint: `${embed.provider}를 페이지 안에서 보기`, run: () => convertPastedLink(editor, state, "embed") }] : []),
+  ];
+  const [active, setActive] = useState(0);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        setActive((i) => (i + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        options[activeRef.current].run();
+        onClose();
+        return;
+      }
+      // Esc 나 그 밖의 키: 링크로 두고 닫는다 (입력은 그대로 편집기로 간다)
+      if (!["Shift", "Control", "Alt", "Meta"].includes(event.key)) onClose();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) onClose();
+    };
+    // 편집기보다 먼저 받아야 화살표·Enter 가 편집기로 가지 않는다
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [state]);
+
+  return (
+    <div
+      ref={ref}
+      className="noty-paste-menu"
+      role="menu"
+      aria-label="붙여 넣은 링크"
+      style={{ left: Math.min(state.x, window.innerWidth - 248), top: Math.min(state.y + 6, window.innerHeight - 140) }}
+    >
+      {options.map((option, index) => (
+        <button
+          key={option.key}
+          type="button"
+          role="menuitem"
+          className={`noty-paste-menu__item ${index === active ? "noty-paste-menu__item--active" : ""}`}
+          onMouseEnter={() => setActive(index)}
+          onClick={() => {
+            option.run();
+            onClose();
+          }}
+        >
+          <span>{option.label}</span>
+          <span className="noty-paste-menu__hint">{option.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
 }

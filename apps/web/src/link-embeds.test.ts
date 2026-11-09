@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { safeHttpUrl, toEmbed } from "./link-embeds";
+import { removePastedLink, safeHttpUrl, toEmbed } from "./link-embeds";
 
 test("toEmbed: allowed providers become iframe URLs", () => {
   assert.equal(toEmbed("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42")?.src, "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42");
@@ -28,4 +28,17 @@ test("safeHttpUrl", () => {
   assert.equal(safeHttpUrl("javascript:alert(1)"), null);
   assert.equal(safeHttpUrl("data:image/png;base64,AA"), null);
   assert.equal(safeHttpUrl(undefined), null);
+});
+
+test("removePastedLink: drops the last matching link and reports leftover text", () => {
+  const link = (href: string) => ({ type: "link", href, content: [{ type: "text", text: href, styles: {} }] });
+  const only = removePastedLink([link("https://a.com")], "https://a.com");
+  assert.deepEqual(only, { content: [], onlyLink: true });
+  const mixed = removePastedLink([{ type: "text", text: "see ", styles: {} }, link("https://a.com"), { type: "text", text: " ", styles: {} }], "https://a.com");
+  assert.equal(mixed.onlyLink, false);
+  assert.equal(mixed.content.length, 2);
+  const twice = removePastedLink([link("https://a.com"), { type: "text", text: " and ", styles: {} }, link("https://a.com")], "https://a.com");
+  assert.equal((twice.content[0] as any).type, "link");
+  assert.equal(twice.content.length, 2);
+  assert.equal(removePastedLink(undefined, "x").onlyLink, true);
 });
