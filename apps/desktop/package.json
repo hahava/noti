@@ -1,6 +1,6 @@
 {
   "name": "@noty/desktop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Noty 데스크톱 앱 (Electron). 빌드된 웹 화면을 불러와 Noty 서버에 접속한다.",
   "license": "GPL-3.0-only",
