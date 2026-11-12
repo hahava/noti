@@ -160,7 +160,7 @@ export type AIChatStreamDone = { provider: string; model: string; truncated: boo
  * signal 로 중단하면 AbortError(name === "AbortError")를 던진다.
  */
 async function streamAIChat(
-  payload: { messages: AIChatMessage[]; pageTitle?: string; pageContext?: string; useWorkspace?: boolean },
+  payload: { messages: AIChatMessage[]; pageTitle?: string; pageContext?: string; useWorkspace?: boolean; editSelection?: string },
   onDelta: (text: string) => void,
   signal?: AbortSignal,
   onSources?: (sources: AIChatSource[], warning?: string) => void,

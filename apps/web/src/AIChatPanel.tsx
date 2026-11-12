@@ -3,6 +3,18 @@ import { workspaceApi } from "./api";
 import { WikiConceptView } from "./WikiConceptView";
 import { WikiHome } from "./WikiHome";
 import type { AIChatMessage, AIChatSource, AIProvider, AIStatus, PageDigest, WikiOverview } from "./vite-env";
+import { cleanAIMarkdown, type AIEditorBridge, type AIEditSelection } from "./ai-markdown";
+
+/** 화면용 메시지: 편집 모드로 받은 답은 바꿀 범위를 함께 들고 있다 */
+type PanelMessage = AIChatMessage & { edit?: AIEditSelection; applied?: string };
+
+const EDIT_ACTIONS: [label: string, prompt: string][] = [
+  ["다듬기", "더 자연스럽게 다듬어 줘"],
+  ["요약", "짧게 요약해 줘"],
+  ["맞춤법", "맞춤법과 띄어쓰기를 고쳐 줘"],
+  ["영어로", "영어로 번역해 줘"],
+  ["할 일로", "할 일 목록으로 바꿔 줘"],
+];
 
 /* ==========================================================================
  * AI 어시스턴트 우측 사이드 패널
@@ -321,6 +333,8 @@ interface AIChatPanelProps {
   onOpenSource: (pageId: string, blockId: string | null) => void;
   /** ⌘K 등 바깥에서 개념 보기를 요청 (nonce 가 바뀌면 다시 연다) */
   conceptRequest?: { id: string; nonce: number } | null;
+  /** 현재 페이지 편집기 (읽기 전용·캔버스·홈이면 없음) */
+  editorBridge?: AIEditorBridge | null;
 }
 
 export function AIChatPanel({
@@ -333,8 +347,41 @@ export function AIChatPanel({
   statusVersion,
   onOpenSource,
   conceptRequest,
+  editorBridge = null,
 }: AIChatPanelProps) {
-  const [messages, setMessages] = useState<AIChatMessage[]>([]);
+  const [messages, setMessages] = useState<PanelMessage[]>([]);
+  // 편집기에서 고른 블록 수 (0 이면 일반 대화). ✕ 를 누르면 그 선택은 무시한다.
+  const [selectionCount, setSelectionCount] = useState(0);
+  const [ignoreSelection, setIgnoreSelection] = useState(false);
+  useEffect(() => {
+    if (!editorBridge) {
+      setSelectionCount(0);
+      return;
+    }
+    const update = () => {
+      setSelectionCount(editorBridge.selectionCount());
+      setIgnoreSelection(false);
+    };
+    update();
+    return editorBridge.subscribe(update);
+  }, [editorBridge]);
+  const editing = selectionCount > 0 && !ignoreSelection;
+
+  const setMessageAt = (index: number, patch: Partial<PanelMessage>) =>
+    setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
+
+  const applyMessage = (index: number, mode: "replace" | "insert") => {
+    const message = messages[index];
+    if (!editorBridge || !message) return;
+    if (mode === "replace" && message.edit) {
+      const result = editorBridge.replace(message.edit, message.content);
+      if (result === "ok") setMessageAt(index, { applied: "바꿨습니다 · ⌘Z 로 되돌리기" });
+      else setError(result === "missing" ? "선택했던 블록이 지워졌습니다. '아래에 넣기'를 쓰세요." : "그 사이 선택했던 부분이 바뀌어 덮어쓰지 않았습니다. 다시 선택해 요청하거나 '아래에 넣기'를 쓰세요.");
+      return;
+    }
+    const after = message.edit?.pageId === editorBridge.pageId ? message.edit.blockIds[message.edit.blockIds.length - 1] : undefined;
+    if (editorBridge.insert(message.content, after)) setMessageAt(index, { applied: "페이지에 넣었습니다 · ⌘Z 로 되돌리기" });
+  };
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -459,8 +506,9 @@ export function AIChatPanel({
   const send = async (text: string) => {
     const content = text.trim();
     if (!content || isSending) return;
-    const history: AIChatMessage[] = [...messages, { role: "user", content }];
-    setMessages([...history, { role: "assistant", content: "" }]);
+    const edit = editing ? editorBridge?.getSelection() ?? undefined : undefined;
+    const history: PanelMessage[] = [...messages, { role: "user", content }];
+    setMessages([...history, { role: "assistant", content: "", edit }]);
     setInput("");
     setError(null);
     setSourceWarning(null);
@@ -485,10 +533,12 @@ export function AIChatPanel({
     try {
       const result = await workspaceApi.streamChatWithAI(
         {
-          messages: history,
-          pageTitle: usePageContext ? activePageTitle : undefined,
-          pageContext: usePageContext ? getActivePageContext() : undefined,
-          useWorkspace,
+          // 편집 모드는 선택 부분만 보낸다: 이전 답이나 페이지 전체를 함께 주면 작은 모델이 문서 전체를 다시 써 버린다
+          messages: edit ? [{ role: "user", content }] : history,
+          pageTitle: usePageContext || edit ? activePageTitle : undefined,
+          pageContext: usePageContext && !edit ? getActivePageContext() : undefined,
+          useWorkspace: useWorkspace && !edit,
+          editSelection: edit?.markdown,
         },
         (delta) => {
           pending += delta;
@@ -719,7 +769,7 @@ export function AIChatPanel({
             <div key={index} className={`ai-panel__message ai-panel__message--${message.role}`}>
               <div className={`ai-panel__bubble ${isStreaming ? "ai-panel__bubble--streaming" : ""}`}>
                 <MessageContent
-                  content={message.content}
+                  content={message.edit ? cleanAIMarkdown(message.content) : message.content}
                   sources={message.sources}
                   onOpenSource={(source) => onOpenSource(source.pageId, source.blockId)}
                 />
@@ -730,14 +780,42 @@ export function AIChatPanel({
                   onOpenSource={(source) => onOpenSource(source.pageId, source.blockId)}
                 />
               )}
+              {message.role === "assistant" && message.edit && (
+                <details className="ai-panel__original">
+                  <summary>원래 내용</summary>
+                  <MessageContent content={message.edit.markdown} />
+                </details>
+              )}
               {message.role === "assistant" && !isStreaming && (
-                <button
-                  type="button"
-                  className="ai-panel__copy-btn"
-                  onClick={() => void navigator.clipboard?.writeText(message.content)}
-                >
-                  복사
-                </button>
+                <div className="ai-panel__actions">
+                  {message.applied ? (
+                    <span className="ai-panel__applied">✓ {message.applied}</span>
+                  ) : (
+                    editorBridge &&
+                    message.content &&
+                    (message.edit ? (
+                      <>
+                        <button type="button" className="ai-panel__apply-btn ai-panel__apply-btn--primary" onClick={() => applyMessage(index, "replace")}>
+                          선택 부분 바꾸기
+                        </button>
+                        <button type="button" className="ai-panel__apply-btn" onClick={() => applyMessage(index, "insert")}>
+                          아래에 넣기
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="ai-panel__apply-btn" onClick={() => applyMessage(index, "insert")} title="커서가 있는 블록 아래에 넣습니다">
+                        페이지에 넣기
+                      </button>
+                    ))
+                  )}
+                  <button
+                    type="button"
+                    className="ai-panel__copy-btn"
+                    onClick={() => void navigator.clipboard?.writeText(message.edit ? cleanAIMarkdown(message.content) : message.content)}
+                  >
+                    복사
+                  </button>
+                </div>
               )}
             </div>
             );
@@ -785,13 +863,30 @@ export function AIChatPanel({
             {usePageContext && activePageTitle ? <em> · {activePageTitle}</em> : null}
           </span>
         </label>
+        {editing && (
+          <div className="ai-panel__edit-target">
+            <div className="ai-panel__edit-chip">
+              <span>✎ 선택한 블록 {selectionCount}개를 고칩니다</span>
+              <button type="button" onClick={() => setIgnoreSelection(true)} aria-label="선택 무시하고 일반 질문하기" title="선택 무시">
+                ✕
+              </button>
+            </div>
+            <div className="ai-panel__edit-actions">
+              {EDIT_ACTIONS.map(([label, prompt]) => (
+                <button key={label} type="button" className="ai-panel__suggestion" disabled={isSending} title={prompt} onClick={() => void send(prompt)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="ai-panel__input-wrap">
           <textarea
             ref={inputRef}
             className="ai-panel__input"
             value={input}
             rows={2}
-            placeholder="AI에게 질문하기… (Enter 전송, Shift+Enter 줄바꿈)"
+            placeholder={editing ? "선택한 부분을 어떻게 바꿀까요? (Enter 전송)" : "AI에게 질문하기… (Enter 전송, Shift+Enter 줄바꿈)"}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
           />

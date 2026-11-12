@@ -6,7 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type DragEvent,
+  type SetStateAction,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -85,6 +87,7 @@ import {
   HomeSvgIcon,
 } from "./HomeDashboard";
 import { AIChatPanel, AISparkleSvgIcon, blocksToPlainText } from "./AIChatPanel";
+import { createAIEditorBridge, type AIEditorBridge } from "./ai-markdown";
 import { AIProviderSettings } from "./AIProviderSettings";
 import { revealBlockWhenReady, SearchHitContent, useWorkspaceSearch } from "./WorkspaceSearch";
 import { CanvasPane, CanvasPreview } from "./CanvasPane";
@@ -1204,6 +1207,8 @@ interface EditorPaneProps {
   /** nonce 가 바뀔 때마다 이 템플릿을 본문에 적용한다 */
   templateApplyRequest?: { template: PageTemplate; nonce: number } | null;
   onOpenTemplates?: () => void;
+  /** 활성 탭의 편집기만 AI 패널에 연결한다 (선택 부분 바꾸기·페이지에 넣기) */
+  onAIBridgeChange?: Dispatch<SetStateAction<AIEditorBridge | null>>;
 }
 
 function EditorPane({
@@ -1227,6 +1232,7 @@ function EditorPane({
   templatePreview,
   templateApplyRequest,
   onOpenTemplates,
+  onAIBridgeChange,
 }: EditorPaneProps) {
   // 읽기 전용 계정: 보기만 한다 (편집·구조 보정·저장을 하지 않음. 서버도 같은 기준으로 막는다).
   const readOnly = authSession.user.role === "viewer";
@@ -1463,6 +1469,13 @@ function EditorPane({
     });
     setAppliedTemplate(template.name);
   }, [templateApplyRequest]);
+
+  useEffect(() => {
+    if (!onAIBridgeChange || readOnly) return;
+    const bridge = createAIEditorBridge(editor, pageId);
+    onAIBridgeChange(bridge);
+    return () => onAIBridgeChange((current) => (current === bridge ? null : current));
+  }, [editor, pageId, onAIBridgeChange, readOnly]);
 
   const isEditorReady = () =>
     editor.document.length > 0 && (!collaborationProvider || collaborationProvider.synced);
@@ -2461,6 +2474,7 @@ export default function App() {
   const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
   const [templatePreview, setTemplatePreview] = useState<PageTemplate | null>(null);
   const [templateApplyRequest, setTemplateApplyRequest] = useState<{ template: PageTemplate; nonce: number } | null>(null);
+  const [aiEditorBridge, setAIEditorBridge] = useState<AIEditorBridge | null>(null);
   useEffect(() => {
     if (isAIPanelOpen) setIsTemplatePanelOpen(false);
   }, [isAIPanelOpen]);
@@ -5482,6 +5496,7 @@ export default function App() {
                               setActiveTabId(paneTab.id);
                               openTemplatePanel();
                             }}
+                            onAIBridgeChange={paneTab.id === activeTabId ? setAIEditorBridge : undefined}
                           />
                         </CollectionActionsContext.Provider>
                       </WorkspacePagesContext.Provider>
@@ -5607,6 +5622,7 @@ export default function App() {
             ? blocksToPlainText(documentsByPageId[activePageId]?.blocks as unknown[] | undefined)
             : ""
         }
+        editorBridge={aiEditorBridge && aiEditorBridge.pageId === activePageId ? aiEditorBridge : null}
         onClose={() => setIsAIPanelOpen(false)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         statusVersion={aiStatusVersion}

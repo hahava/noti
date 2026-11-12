@@ -1224,3 +1224,94 @@ div.ai-digest__header {
     color: #f0b25a;
   }
 }
+
+/* AI 편집: 답을 페이지에 넣기 / 선택 부분 바꾸기 */
+.ai-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-panel__apply-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-surface);
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  cursor: pointer;
+}
+
+.ai-panel__apply-btn:hover {
+  background: var(--ds-bg-hover);
+}
+
+.ai-panel__apply-btn--primary {
+  border-color: var(--ds-text-accent);
+  background: var(--ds-text-accent);
+  color: #fff;
+}
+
+.ai-panel__apply-btn--primary:hover {
+  background: var(--ds-text-accent);
+  filter: brightness(1.08);
+}
+
+.ai-panel__applied {
+  color: var(--ds-text-faint);
+  font-size: var(--ds-text-xs);
+}
+
+.ai-panel__original {
+  max-width: 100%;
+  color: var(--ds-text-faint);
+  font-size: var(--ds-text-xs);
+}
+
+.ai-panel__original summary {
+  cursor: pointer;
+}
+
+.ai-panel__original[open] {
+  padding: 6px 8px;
+  border-left: 2px solid var(--ds-border-subtle);
+  opacity: 0.85;
+}
+
+.ai-panel__edit-target {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-panel__edit-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-bg-accent-subtle);
+  color: var(--ds-text-primary);
+  font-size: var(--ds-text-xs);
+}
+
+.ai-panel__edit-chip button {
+  border: none;
+  background: none;
+  color: var(--ds-text-faint);
+  cursor: pointer;
+}
+
+.ai-panel__edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ai-panel__edit-actions .ai-panel__suggestion {
+  padding: 3px 8px;
+  font-size: var(--ds-text-xs);
+}
