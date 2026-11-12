@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useComponentsContext } from "@blocknote/react";
 import { workspaceApi } from "./api";
 import { WikiConceptView } from "./WikiConceptView";
 import { WikiHome } from "./WikiHome";
 import type { AIChatMessage, AIChatSource, AIProvider, AIStatus, PageDigest, WikiOverview } from "./vite-env";
-import { cleanAIMarkdown, type AIEditorBridge, type AIEditSelection } from "./ai-markdown";
+import { cleanAIMarkdown, shrinkWarning, type AIEditorBridge, type AIEditSelection } from "./ai-markdown";
 
 /** 화면용 메시지: 편집 모드로 받은 답은 바꿀 범위를 함께 들고 있다 */
 type PanelMessage = AIChatMessage & { edit?: AIEditSelection; applied?: string };
@@ -29,6 +30,23 @@ export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   gemini: "Gemini",
   custom: "OpenAI 호환",
 };
+
+/** 서식 도구 모음의 "✦ AI" 버튼: 선택한 블록을 AI 패널에서 고치게 한다 */
+export function AskAIToolbarButton({ onClick }: { onClick: () => void }) {
+  const Components = useComponentsContext()!;
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button ai-toolbar-btn"
+      label="AI로 고치기"
+      mainTooltip="AI로 고치기 (다듬기·요약·번역)"
+      onClick={onClick}
+    >
+      <span className="ai-toolbar-btn__label">
+        <AISparkleSvgIcon size={13} /> AI
+      </span>
+    </Components.FormattingToolbar.Button>
+  );
+}
 
 export function AISparkleSvgIcon({ size = 15 }: { size?: number }) {
   return (
@@ -335,6 +353,8 @@ interface AIChatPanelProps {
   conceptRequest?: { id: string; nonce: number } | null;
   /** 현재 페이지 편집기 (읽기 전용·캔버스·홈이면 없음) */
   editorBridge?: AIEditorBridge | null;
+  /** 바뀔 때마다 입력창에 포커스 (서식 도구 모음의 ✦ 버튼) */
+  focusNonce?: number;
 }
 
 export function AIChatPanel({
@@ -348,6 +368,7 @@ export function AIChatPanel({
   onOpenSource,
   conceptRequest,
   editorBridge = null,
+  focusNonce,
 }: AIChatPanelProps) {
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   // 편집기에서 고른 블록 수 (0 이면 일반 대화). ✕ 를 누르면 그 선택은 무시한다.
@@ -366,6 +387,10 @@ export function AIChatPanel({
     return editorBridge.subscribe(update);
   }, [editorBridge]);
   const editing = selectionCount > 0 && !ignoreSelection;
+  useEffect(() => {
+    // 패널이 열리는 애니메이션 뒤에 포커스 (편집기 선택은 그대로 남는다)
+    if (focusNonce) window.setTimeout(() => inputRef.current?.focus(), 30);
+  }, [focusNonce]);
 
   const setMessageAt = (index: number, patch: Partial<PanelMessage>) =>
     setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
@@ -786,6 +811,10 @@ export function AIChatPanel({
                   <MessageContent content={message.edit.markdown} />
                 </details>
               )}
+              {message.role === "assistant" && !isStreaming && message.edit && !message.applied && (() => {
+                const warning = shrinkWarning(message.edit.markdown, message.content, messages[index - 1]?.content ?? "");
+                return warning && <div className="ai-panel__warning">⚠ {warning}</div>;
+              })()}
               {message.role === "assistant" && !isStreaming && (
                 <div className="ai-panel__actions">
                   {message.applied ? (

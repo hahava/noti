@@ -494,7 +494,9 @@ export async function streamChatWithAI(
     throw new Error("보낼 메시지가 없습니다.");
   }
   const system = buildSystemPrompt(rawReq, sources, pageSummaries, conceptArticles);
-  return streamCompletion(ai, { system, messages: withEditSelection(messages, rawReq.editSelection), signal }, onDelta);
+  // 편집은 글을 고쳐 쓰는 일이라 생각 단계가 필요 없다 (qwen3 등에서 20~30초 → 몇 초)
+  const editing = Boolean(rawReq.editSelection?.trim());
+  return streamCompletion(ai, { system, messages: withEditSelection(messages, rawReq.editSelection), signal, disableThinking: editing }, onDelta);
 }
 
 /** 스트리밍 결과를 모아 한 번에 돌려준다. 생각 태그(<think>…</think>)는 제거한다. */

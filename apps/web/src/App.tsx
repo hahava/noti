@@ -53,7 +53,10 @@ import type { UserTemplateRecord } from "./api";
 import {
   createReactBlockSpec,
   createReactInlineContentSpec,
+  FormattingToolbar,
+  FormattingToolbarController,
   getDefaultReactSlashMenuItems,
+  getFormattingToolbarItems,
   SuggestionMenuController,
   useCreateBlockNote,
   type DefaultReactSuggestionItem,
@@ -86,7 +89,7 @@ import {
   HOME_PAGE_ID,
   HomeSvgIcon,
 } from "./HomeDashboard";
-import { AIChatPanel, AISparkleSvgIcon, blocksToPlainText } from "./AIChatPanel";
+import { AIChatPanel, AISparkleSvgIcon, AskAIToolbarButton, blocksToPlainText } from "./AIChatPanel";
 import { createAIEditorBridge, type AIEditorBridge } from "./ai-markdown";
 import { AIProviderSettings } from "./AIProviderSettings";
 import { revealBlockWhenReady, SearchHitContent, useWorkspaceSearch } from "./WorkspaceSearch";
@@ -1209,6 +1212,8 @@ interface EditorPaneProps {
   onOpenTemplates?: () => void;
   /** 활성 탭의 편집기만 AI 패널에 연결한다 (선택 부분 바꾸기·페이지에 넣기) */
   onAIBridgeChange?: Dispatch<SetStateAction<AIEditorBridge | null>>;
+  /** 서식 도구 모음의 ✦ 버튼: 선택한 채로 AI 패널을 연다 */
+  onAskAI?: () => void;
 }
 
 function EditorPane({
@@ -1233,6 +1238,7 @@ function EditorPane({
   templateApplyRequest,
   onOpenTemplates,
   onAIBridgeChange,
+  onAskAI,
 }: EditorPaneProps) {
   // 읽기 전용 계정: 보기만 한다 (편집·구조 보정·저장을 하지 않음. 서버도 같은 기준으로 막는다).
   const readOnly = authSession.user.role === "viewer";
@@ -1905,8 +1911,16 @@ function EditorPane({
           onSaveBlocks(pageId, blocksWithCollectionSnapshots(), title);
         }}
         slashMenu={false}
+        formattingToolbar={false}
         theme="light"
       >
+        <FormattingToolbarController
+          formattingToolbar={() => (
+            <FormattingToolbar>
+              {[...getFormattingToolbarItems(), ...(onAskAI && !readOnly ? [<AskAIToolbarButton key="ask-ai" onClick={onAskAI} />] : [])]}
+            </FormattingToolbar>
+          )}
+        />
         <SuggestionMenuController
           triggerCharacter="/"
           getItems={async (query) =>
@@ -2475,6 +2489,11 @@ export default function App() {
   const [templatePreview, setTemplatePreview] = useState<PageTemplate | null>(null);
   const [templateApplyRequest, setTemplateApplyRequest] = useState<{ template: PageTemplate; nonce: number } | null>(null);
   const [aiEditorBridge, setAIEditorBridge] = useState<AIEditorBridge | null>(null);
+  const [aiFocusNonce, setAIFocusNonce] = useState(0);
+  const openAIForSelection = useCallback(() => {
+    setIsAIPanelOpen(true);
+    setAIFocusNonce((n) => n + 1);
+  }, []);
   useEffect(() => {
     if (isAIPanelOpen) setIsTemplatePanelOpen(false);
   }, [isAIPanelOpen]);
@@ -5497,6 +5516,7 @@ export default function App() {
                               openTemplatePanel();
                             }}
                             onAIBridgeChange={paneTab.id === activeTabId ? setAIEditorBridge : undefined}
+                            onAskAI={paneTab.id === activeTabId ? openAIForSelection : undefined}
                           />
                         </CollectionActionsContext.Provider>
                       </WorkspacePagesContext.Provider>
@@ -5623,6 +5643,7 @@ export default function App() {
             : ""
         }
         editorBridge={aiEditorBridge && aiEditorBridge.pageId === activePageId ? aiEditorBridge : null}
+        focusNonce={aiFocusNonce}
         onClose={() => setIsAIPanelOpen(false)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         statusVersion={aiStatusVersion}

@@ -166,6 +166,20 @@ export function aiMarkdownToBlocks(raw: string, parse: ParseMarkdown, originals:
   return out;
 }
 
+/**
+ * 작은 모델은 바꾸면서 문단을 통째로 빠뜨리기도 한다. 줄이라는 요청이 아닌데 크게 줄었으면 경고 문구를 돌려준다.
+ * shortcut: 줄 수·글자 수 비율로만 본다, 오탐이 잦으면 문장 단위 비교로 바꾼다.
+ */
+export function shrinkWarning(original: string, result: string, request: string): string | null {
+  if (/요약|줄여|짧게|간단히|할 ?일|목록|삭제|지워|summar|shorten/i.test(request)) return null;
+  const lines = (text: string) => text.split("\n").filter((line) => line.trim()).length;
+  const chars = (text: string) => text.replace(/\s/g, "").length;
+  const cleaned = cleanAIMarkdown(result);
+  const fewerLines = lines(original) >= 3 && lines(cleaned) < lines(original) * 0.6;
+  const fewerChars = chars(cleaned) < chars(original) * 0.4;
+  return fewerLines || fewerChars ? "원래보다 많이 짧습니다. 빠진 내용이 없는지 확인하세요." : null;
+}
+
 /* ------------------------------------------------------------------ 편집기 연결 (AI 패널 ↔ 현재 페이지) */
 
 export interface AIEditSelection {

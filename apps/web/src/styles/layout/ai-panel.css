@@ -1315,3 +1315,17 @@ div.ai-digest__header {
   padding: 3px 8px;
   font-size: var(--ds-text-xs);
 }
+
+.ai-panel__warning {
+  color: var(--ds-label-orange-text);
+  font-size: var(--ds-text-xs);
+}
+
+/* 서식 도구 모음의 ✦ AI 버튼 */
+.ai-toolbar-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ds-text-accent);
+  font-weight: 600;
+}

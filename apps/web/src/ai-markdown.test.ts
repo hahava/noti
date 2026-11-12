@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown } from "./ai-markdown";
+import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown, shrinkWarning } from "./ai-markdown";
 
 const text = (t: string) => [{ type: "text", text: t, styles: {} }];
 /** 테스트용: 블록 종류와 글만 적는다 */
@@ -56,4 +56,11 @@ test("cleanAIMarkdown and code fences stay code", () => {
   const blocks = aiMarkdownToBlocks("```js\nconst a = 1;\nhttps://not-a-bookmark.com\n```", (md) => [{ type: "codeBlock", content: md }]);
   assert.equal(blocks.length, 1);
   assert.equal(blocks[0].type, "codeBlock");
+});
+
+test("shrinkWarning: flags dropped content unless the request asks to shorten", () => {
+  const original = "첫 문단입니다.\n\n둘째 문단입니다.\n\n셋째 문단입니다.\n\n넷째 문단입니다.";
+  assert.equal(shrinkWarning(original, "<result>\nFirst paragraph.\n\nSecond paragraph.\n\nThird.\n\nFourth.\n</result>", "영어로 번역해 줘"), null);
+  assert.ok(shrinkWarning(original, "<result>\nFourth paragraph.\n</result>", "영어로 번역해 줘"));
+  assert.equal(shrinkWarning(original, "네 문단 요약", "짧게 요약해 줘"), null);
 });
