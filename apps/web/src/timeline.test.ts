@@ -27,6 +27,8 @@ test("timeline: range and headers", () => {
   assert.equal(fromDayNumber(range.start).slice(8), "01", "range starts on the 1st");
   assert.equal(fromDayNumber(timelineRange([], today, "day").start).slice(8), "01");
   assert.ok(range.end > today);
+  const wild = timelineRange([{ start: toDayNumber("0001-01-01")!, end: toDayNumber("9999-12-31")! }], today, "day");
+  assert.ok(wild.end - wild.start < 11 * 366, "extreme dates are clamped to ±5 years");
   const week = { start: toDayNumber("2026-11-16")!, end: toDayNumber("2026-11-30")! };
   assert.deepEqual(headerTicks(week, "week").map((t) => t.label), ["11/16", "11/23", "11/30"]);
   assert.deepEqual(headerGroups({ start: toDayNumber("2026-11-30")!, end: toDayNumber("2026-12-02")! }, "day"), [

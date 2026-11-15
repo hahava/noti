@@ -193,10 +193,13 @@ export function CollectionTimeline({
                       onChangeDates(row, day, day);
                     }}
                   >
-                    {live && (
+                    {live && live.end >= range.start && live.start <= range.end && (
                       <div
                         className={`ndb-timeline__item ${drag?.rowId === row.id ? "ndb-timeline__item--dragging" : ""}`}
-                        style={{ left: x(live.start), width: (live.end - live.start + 1) * dayWidth }}
+                        style={{
+                          left: x(Math.max(live.start, range.start)),
+                          width: (Math.min(live.end, range.end) - Math.max(live.start, range.start) + 1) * dayWidth,
+                        }}
                         title={`${row.title || "제목 없음"} · ${fromDayNumber(live.start)}${live.end > live.start ? ` → ${fromDayNumber(live.end)}` : ""}`}
                         onPointerDown={(e) => startDrag(e, row.id, "move")}
                         onDoubleClick={(e) => onOpenRow(row, e)}
