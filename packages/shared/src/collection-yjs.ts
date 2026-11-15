@@ -143,6 +143,7 @@ function patchView(record: RecordMap, before: CollectionView | undefined, after:
     "hideCompleted",
     "groupBy",
     "datePropertyId",
+    "endDatePropertyId",
     "filterMode",
     "peekMode",
     "showTitle",
@@ -447,7 +448,7 @@ export function readCollectionMap(map: RecordMap): CollectionData | null {
         return {
           id,
           name: stringValue(value.get("name")),
-          mode: ["board", "calendar", "gallery", "list"].includes(String(value.get("mode")))
+          mode: ["board", "calendar", "gallery", "list", "timeline"].includes(String(value.get("mode")))
             ? value.get("mode") as CollectionView["mode"]
             : "table",
           statusFilter: stringValue(value.get("statusFilter")) as CollectionView["statusFilter"],
@@ -461,6 +462,7 @@ export function readCollectionMap(map: RecordMap): CollectionData | null {
           groupBy: stringValue(value.get("groupBy")),
           ...(collapsedGroups && collapsedGroups.length > 0 ? { collapsedGroups } : {}),
           datePropertyId: stringValue(value.get("datePropertyId")),
+          ...(value.get("endDatePropertyId") ? { endDatePropertyId: stringValue(value.get("endDatePropertyId")) } : {}),
           hiddenPropertyIds: (value.get("hiddenPropertyIds") as Y.Array<string> | undefined)?.toArray() ?? [],
           filters: readFilters(value.get("filtersJson")),
           filterMode: value.get("filterMode") === "or" ? "or" : "and",

@@ -1,5 +1,5 @@
 export type CollectionStatus = "todo" | "in_progress" | "review" | "done";
-export type CollectionViewMode = "table" | "board" | "calendar" | "gallery" | "list";
+export type CollectionViewMode = "table" | "board" | "calendar" | "gallery" | "list" | "timeline";
 export type CollectionSortBy = "manual" | "title" | "date" | "status" | string;
 export type CollectionSortDirection = "asc" | "desc";
 export type CollectionOptionColor = "gray" | "blue" | "green" | "amber" | "purple" | "rose";
@@ -55,6 +55,8 @@ export interface CollectionView {
   groupBy?: string;
   collapsedGroups?: string[];
   datePropertyId?: string;
+  /** 타임라인 뷰의 끝 날짜 속성 (시작은 datePropertyId) */
+  endDatePropertyId?: string;
   hiddenPropertyIds?: string[];
   filters?: CollectionFilterRule[];
   filterMode?: "and" | "or";

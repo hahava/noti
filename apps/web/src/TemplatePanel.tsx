@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PreviewBlocks } from "./PageHistory";
-import { PAGE_TEMPLATES, USER_TEMPLATE_CATEGORY, pageBlocksToTemplate, type PageTemplate } from "./templates";
+import { pageBlocksToTemplate, type PageTemplate } from "./templates";
 
 const RECENT_KEY = "noty.recentTemplates";
 
@@ -61,7 +61,6 @@ export function TemplatePanel({
   onDeleteTemplate: (template: PageTemplate) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [recentIds, setRecentIds] = useState(readRecent);
   const [menu, setMenu] = useState<{ id: string; confirmDelete: boolean } | null>(null);
 
@@ -72,9 +71,7 @@ export function TemplatePanel({
     return () => window.removeEventListener("click", close);
   }, [menu]);
 
-  // 내 템플릿 → 기본 제공 순서
-  const allTemplates = useMemo(() => [...userTemplates, ...PAGE_TEMPLATES], [userTemplates]);
-  const categories = useMemo(() => [...new Set(allTemplates.map((t) => t.category))], [allTemplates]);
+  const allTemplates = userTemplates;
   const q = query.trim().toLowerCase();
   const matches = q
     ? allTemplates.filter((t) => `${t.name} ${t.description} ${t.category}`.toLowerCase().includes(q))
@@ -93,7 +90,6 @@ export function TemplatePanel({
   };
 
   const renderItem = (template: PageTemplate) => {
-    const isUser = template.category === USER_TEMPLATE_CATEGORY;
     const menuOpen = menu?.id === template.id;
     return (
       <li key={template.id} className="template-panel__row">
@@ -114,20 +110,18 @@ export function TemplatePanel({
             {template.description && <span className="template-panel__desc">{template.description}</span>}
           </span>
         </button>
-        {isUser && (
-          <button
-            type="button"
-            className={`template-panel__more ${menuOpen ? "template-panel__more--open" : ""}`}
-            aria-label={`${template.name} 템플릿 메뉴`}
-            aria-expanded={menuOpen}
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenu(menuOpen ? null : { id: template.id, confirmDelete: false });
-            }}
-          >
-            ⋯
-          </button>
-        )}
+        <button
+          type="button"
+          className={`template-panel__more ${menuOpen ? "template-panel__more--open" : ""}`}
+          aria-label={`${template.name} 템플릿 메뉴`}
+          aria-expanded={menuOpen}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenu(menuOpen ? null : { id: template.id, confirmDelete: false });
+          }}
+        >
+          ⋯
+        </button>
         {menuOpen && (
           <div className="noty-popover-menu template-panel__menu" onClick={(event) => event.stopPropagation()}>
             <button
@@ -231,36 +225,16 @@ export function TemplatePanel({
                   <ul className="template-panel__list">{recent.map(renderItem)}</ul>
                 </section>
               )}
-              {categories.map((category) => {
-                const isCollapsed = collapsed.has(category);
-                return (
-                  <section key={category} className="template-panel__group">
-                    <button
-                      type="button"
-                      className="template-panel__group-toggle"
-                      aria-expanded={!isCollapsed}
-                      onClick={() =>
-                        setCollapsed((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(category)) next.delete(category);
-                          else next.add(category);
-                          return next;
-                        })
-                      }
-                    >
-                      <span className="template-panel__chevron" aria-hidden="true">
-                        {isCollapsed ? "▸" : "▾"}
-                      </span>
-                      {category}
-                    </button>
-                    {!isCollapsed && (
-                      <ul className="template-panel__list">
-                        {allTemplates.filter((t) => t.category === category).map(renderItem)}
-                      </ul>
-                    )}
-                  </section>
-                );
-              })}
+              {allTemplates.length === 0 ? (
+                <p className="template-panel__empty">
+                  아직 저장한 템플릿이 없습니다. 자주 쓰는 페이지를 만든 뒤 위의 “현재 페이지를 템플릿으로 저장”을 누르세요.
+                </p>
+              ) : (
+                <section className="template-panel__group">
+                  {recent.length > 0 && <h3 className="template-panel__group-label">전체</h3>}
+                  <ul className="template-panel__list">{allTemplates.map(renderItem)}</ul>
+                </section>
+              )}
             </>
           )}
         </div>

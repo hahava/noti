@@ -1736,7 +1736,7 @@ function EditorPane({
 
   const getCollectionBlockSlashItem = (): DefaultReactSuggestionItem => ({
     title: "컬렉션",
-    subtext: "속성을 직접 만들고 표·보드·캘린더·갤러리로 보는 데이터베이스",
+    subtext: "속성을 직접 만들고 표·보드·캘린더·리스트·갤러리·타임라인 뷰로 보는 데이터베이스",
     aliases: [
       "collection",
       "database",
@@ -1748,6 +1748,16 @@ function EditorPane({
       "표",
       "칸반",
       "보드",
+      "calendar",
+      "캘린더",
+      "gallery",
+      "갤러리",
+      "view",
+      "뷰",
+      "timeline",
+      "gantt",
+      "타임라인",
+      "간트",
     ],
     group: "기본 블록",
     icon: <CollectionSvgIcon />,

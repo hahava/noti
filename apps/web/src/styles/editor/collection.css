@@ -1715,6 +1715,225 @@
   gap: 6px;
 }
 
+/* 타임라인(간트) 뷰 */
+.ndb-timeline {
+  padding: 8px 0 14px;
+}
+
+.ndb-timeline__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ndb-calendar__nav button.ndb-timeline__scale--active {
+  background: rgba(55, 53, 47, 0.08);
+  color: #37352f;
+  font-weight: 600;
+}
+
+.ndb-timeline__frame {
+  display: flex;
+  border: 1px solid #e9e9e7;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 12.5px;
+}
+
+.ndb-timeline__names {
+  flex: 0 0 200px;
+  min-width: 0;
+  border-right: 1px solid #e9e9e7;
+  background: #fff;
+}
+
+.ndb-timeline__names-head,
+.ndb-timeline__head {
+  height: 44px;
+  border-bottom: 1px solid #e9e9e7;
+  background: #fbfbfa;
+}
+
+.ndb-timeline__names-head {
+  display: flex;
+  align-items: flex-end;
+  padding: 0 10px 6px;
+  color: #787774;
+  font-size: 11.5px;
+}
+
+.ndb-timeline__name,
+.ndb-timeline__new {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid #f1f1ef;
+  background: transparent;
+  color: #37352f;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ndb-timeline__name:hover,
+.ndb-timeline__new:hover {
+  background: #f7f7f5;
+}
+
+.ndb-timeline__name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ndb-timeline__new {
+  color: #9b9a97;
+  border-bottom: 0;
+}
+
+.ndb-timeline__scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  background: #fff;
+}
+
+.ndb-timeline__head {
+  position: relative;
+}
+
+.ndb-timeline__groups,
+.ndb-timeline__ticks {
+  position: relative;
+  height: 22px;
+}
+
+.ndb-timeline__groups span,
+.ndb-timeline__ticks span {
+  position: absolute;
+  top: 0;
+  padding: 4px 6px 0;
+  white-space: nowrap;
+  color: #787774;
+  font-size: 11px;
+}
+
+.ndb-timeline__groups span {
+  color: #37352f;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.ndb-timeline__ticks span {
+  padding-left: 4px;
+}
+
+.ndb-timeline__ticks .ndb-timeline__tick--today {
+  color: #eb5757;
+  font-weight: 700;
+}
+
+.ndb-timeline__body {
+  position: relative;
+}
+
+.ndb-timeline__gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid #f1f1ef;
+  pointer-events: none;
+}
+
+.ndb-timeline__today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid rgba(235, 87, 87, 0.7);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ndb-timeline__lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid #f1f1ef;
+}
+
+.ndb-timeline__lane--unscheduled {
+  cursor: copy;
+}
+
+.ndb-timeline__lane--unscheduled:hover {
+  background: rgba(35, 131, 226, 0.05);
+}
+
+.ndb-timeline__item {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  min-width: 8px;
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+  background: #d3e5f7;
+  border: 1px solid #a9cbee;
+  color: #1d3f63;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  z-index: 1;
+}
+
+.ndb-timeline__item:hover {
+  background: #c3dbf4;
+}
+
+.ndb-timeline__item--dragging {
+  cursor: grabbing;
+  box-shadow: 0 2px 8px rgba(15, 15, 15, 0.15);
+  z-index: 3;
+}
+
+/* 한 줄에 막대가 하나라 짧은 막대는 이름이 막대 밖으로 이어지게 둔다 */
+.ndb-timeline__item-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: visible;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ndb-timeline__handle {
+  flex: 0 0 6px;
+  align-self: stretch;
+  cursor: ew-resize;
+}
+
+.ndb-timeline__handle:hover {
+  background: rgba(29, 63, 99, 0.18);
+}
+
+.ndb-timeline__handle--start {
+  border-radius: 4px 0 0 4px;
+}
+
+.ndb-timeline__handle--end {
+  border-radius: 0 4px 4px 0;
+}
+
+@media (max-width: 640px) {
+  .ndb-timeline__names {
+    flex-basis: 120px;
+  }
+}
+
 /* ==========================================================================
  * 9. List & Gallery Views
  * ========================================================================== */

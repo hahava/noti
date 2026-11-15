@@ -19,6 +19,7 @@ import { createDefaultCollectionData, migrateLegacyCollectionData, MULTI_VALUE_S
 import { computeColumnCalculation, computePropertyValue } from "@noty/shared/collection-computed";
 import { getStoredAuthSession, resolveUploadUrl, workspaceApi } from "./api";
 import { resolveCollaborationWsUrl } from "./collaboration-url";
+import { CollectionTimeline } from "./CollectionTimeline";
 export { createDefaultCollectionData } from "@noty/shared/collection-schema";
 
 import type {
@@ -105,6 +106,7 @@ const VIEW_MODE_META: Array<{ mode: CollectionViewMode; label: string; icon: str
   { mode: "calendar", label: "캘린더", icon: "▦" },
   { mode: "list", label: "리스트", icon: "≡" },
   { mode: "gallery", label: "갤러리", icon: "▧" },
+  { mode: "timeline", label: "타임라인", icon: "▤" },
 ];
 
 const CALCULATION_LABELS: Record<CollectionCalculationType, string> = {
@@ -167,7 +169,7 @@ function parseCollectionData(raw: string): CollectionData {
           .map((view, index): CollectionView => ({
             id: view.id || `view-${index + 1}`,
             name: typeof view.name === "string" && view.name.trim() ? view.name : `뷰 ${index + 1}`,
-            mode: ["board", "calendar", "gallery", "list"].includes(view.mode) ? view.mode : "table",
+            mode: ["board", "calendar", "gallery", "list", "timeline"].includes(view.mode) ? view.mode : "table",
             statusFilter: STATUS_KEYS.includes(view.statusFilter as CollectionStatus) ? view.statusFilter : "all",
             tagFilter: typeof view.tagFilter === "string" ? view.tagFilter : "all",
             propertyFilterId: typeof view.propertyFilterId === "string" ? view.propertyFilterId : "",
@@ -179,6 +181,7 @@ function parseCollectionData(raw: string): CollectionData {
             groupBy: typeof view.groupBy === "string" ? view.groupBy : "",
             ...(Array.isArray(view.collapsedGroups) ? { collapsedGroups: view.collapsedGroups } : {}),
             datePropertyId: typeof view.datePropertyId === "string" ? view.datePropertyId : "",
+            ...(typeof view.endDatePropertyId === "string" && view.endDatePropertyId ? { endDatePropertyId: view.endDatePropertyId } : {}),
             hiddenPropertyIds: Array.isArray(view.hiddenPropertyIds)
               ? view.hiddenPropertyIds.filter((id): id is string => typeof id === "string")
               : [],
@@ -1397,7 +1400,9 @@ function CollectionBlockComponent({
           ? data.properties.find((property) => property.type === "status" || property.type === "select")?.id ?? ""
           : "",
       datePropertyId:
-        mode === "calendar" ? data.properties.find((property) => property.type === "date")?.id ?? "" : "",
+        mode === "calendar" || mode === "timeline" ? data.properties.find((property) => property.type === "date")?.id ?? "" : "",
+      // 타임라인은 두 번째 날짜 속성이 있으면 끝 날짜로 쓴다
+      ...(mode === "timeline" ? { endDatePropertyId: data.properties.filter((property) => property.type === "date")[1]?.id } : {}),
     };
     updateData((prev) => ({
       ...prev,
@@ -1806,6 +1811,9 @@ function CollectionBlockComponent({
 
   const dateProperty = data.properties.find(
     (property) => property.id === activeView.datePropertyId && property.type === "date",
+  );
+  const endDateProperty = data.properties.find(
+    (property) => property.id === activeView.endDatePropertyId && property.type === "date" && property.id !== dateProperty?.id,
   );
 
   const calendarCells = useMemo(() => {
@@ -2237,9 +2245,27 @@ function CollectionBlockComponent({
                           </select>
                         </label>
                       )}
-                      {view.mode === "calendar" && (
+                      {view.mode === "timeline" && (
                         <label className="ndb-field-label">
-                          날짜 속성
+                          끝 날짜 속성
+                          <select
+                            value={view.endDatePropertyId ?? ""}
+                            onChange={(e) => handleUpdateView(view.id, { endDatePropertyId: e.target.value || undefined })}
+                          >
+                            <option value="">없음 (하루짜리)</option>
+                            {data.properties
+                              .filter((p) => p.type === "date" && p.id !== view.datePropertyId)
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      )}
+                      {(view.mode === "calendar" || view.mode === "timeline") && (
+                        <label className="ndb-field-label">
+                          {view.mode === "timeline" ? "시작 날짜 속성" : "날짜 속성"}
                           <select
                             value={view.datePropertyId ?? ""}
                             onChange={(e) => handleUpdateView(view.id, { datePropertyId: e.target.value })}
@@ -3514,11 +3540,36 @@ function CollectionBlockComponent({
             })
           )}
         </div>
-      ) : activeView.mode === "calendar" ? (
+      ) : activeView.mode === "timeline" && dateProperty ? (
+        <CollectionTimeline
+          rows={filteredAndSortedRows}
+          startPropertyId={dateProperty.id}
+          endPropertyId={endDateProperty?.id}
+          onChangeDates={(row, start, end) =>
+            updateData((prev) => ({
+              ...prev,
+              rows: prev.rows.map((current) =>
+                current.id === row.id
+                  ? {
+                      ...current,
+                      values: {
+                        ...current.values,
+                        [dateProperty.id]: start,
+                        ...(endDateProperty ? { [endDateProperty.id]: end } : {}),
+                      },
+                    }
+                  : current,
+              ),
+            }))
+          }
+          onOpenRow={openRow}
+          onAddRow={(start) => handleAddRow({ [dateProperty.id]: start }, { openAfterCreate: true })}
+        />
+      ) : activeView.mode === "calendar" || activeView.mode === "timeline" ? (
         <div className="ndb-calendar">
           {!dateProperty ? (
             <div className="ndb-empty-state">
-              <p>캘린더를 사용하려면 날짜 속성을 지정하세요.</p>
+              <p>{activeView.mode === "timeline" ? "타임라인" : "캘린더"}를 사용하려면 날짜 속성을 지정하세요.</p>
               <div className="ndb-empty-state__actions">
                 {data.properties.some((p) => p.type === "date") && (
                   <select

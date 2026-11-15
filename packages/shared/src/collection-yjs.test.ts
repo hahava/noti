@@ -296,3 +296,20 @@ test("view and property horizontal width settings sync and reset cleanly in Yjs"
 });
 
 
+
+test("timeline view mode and end date property sync in Yjs", () => {
+  const { left, right, leftMap, rightMap } = pair();
+  const base = readCollectionMap(leftMap)!;
+  patchCollectionMap(leftMap, base, {
+    ...base,
+    views: [...base.views, { ...base.views[0], id: "tl", name: "타임라인", mode: "timeline", datePropertyId: "start", endDatePropertyId: "end" }],
+  });
+  merge(left, right);
+  const synced = readCollectionMap(rightMap)!;
+  assert.equal(synced.views[1].mode, "timeline");
+  assert.equal(synced.views[1].endDatePropertyId, "end");
+
+  patchCollectionMap(rightMap, synced, { ...synced, views: synced.views.map((v) => ({ ...v, endDatePropertyId: undefined })) });
+  merge(left, right);
+  assert.equal(readCollectionMap(leftMap)!.views[1].endDatePropertyId, undefined);
+});
