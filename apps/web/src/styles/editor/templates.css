@@ -208,29 +208,6 @@
 }
 
 /* ==========================================================================
- * 3. 빈 페이지 "템플릿에서 시작" 링크
- * ========================================================================== */
-.template-start-hint {
-  margin: 0 0 0 24px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: var(--ds-radius-sm);
-  background: none;
-  color: var(--ds-text-subtle);
-  font-family: var(--ds-font-sans);
-  font-size: var(--ds-text-sm);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.template-start-hint:hover {
-  background: var(--ds-bg-hover);
-  color: var(--ds-text-primary);
-}
-
-/* ==========================================================================
  * 4. 적용 토스트 (실행 취소)
  * ========================================================================== */
 .template-toast {

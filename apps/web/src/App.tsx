@@ -1209,7 +1209,6 @@ interface EditorPaneProps {
   templatePreview?: PageTemplate | null;
   /** nonce 가 바뀔 때마다 이 템플릿을 본문에 적용한다 */
   templateApplyRequest?: { template: PageTemplate; nonce: number } | null;
-  onOpenTemplates?: () => void;
   /** 활성 탭의 편집기만 AI 패널에 연결한다 (선택 부분 바꾸기·페이지에 넣기) */
   onAIBridgeChange?: Dispatch<SetStateAction<AIEditorBridge | null>>;
   /** 서식 도구 모음의 ✦ 버튼: 선택한 채로 AI 패널을 연다 */
@@ -1236,7 +1235,6 @@ function EditorPane({
   onSyncPageWidthFromYjs,
   templatePreview,
   templateApplyRequest,
-  onOpenTemplates,
   onAIBridgeChange,
   onAskAI,
 }: EditorPaneProps) {
@@ -1958,7 +1956,7 @@ function EditorPane({
           getItems={async (query) => getPageMentionItems(query)}
         />
       </BlockNoteView>
-      {templatePreview ? (
+      {templatePreview && (
         <div className="template-ghost" aria-hidden="true">
           <div className="template-ghost__label">
             {templatePreview.icon} {templatePreview.name} 미리보기 · 누르면{" "}
@@ -1966,15 +1964,6 @@ function EditorPane({
           </div>
           <PreviewBlocks blocks={templatePreview.blocks as any[]} />
         </div>
-      ) : (
-        isBodyEmpty &&
-        !readOnly &&
-        onOpenTemplates && (
-          <button type="button" className="template-start-hint" onClick={onOpenTemplates}>
-            <TemplateSvgIcon />
-            템플릿에서 시작
-          </button>
-        )
       )}
       {appliedTemplate && (
         <div className="template-toast" role="status">
@@ -5521,10 +5510,6 @@ export default function App() {
                             onSyncPageWidthFromYjs={handleSyncPageWidthFromYjs}
                             templatePreview={paneTab.id === activeTabId ? templatePreview : null}
                             templateApplyRequest={paneTab.id === activeTabId ? templateApplyRequest : null}
-                            onOpenTemplates={() => {
-                              setActiveTabId(paneTab.id);
-                              openTemplatePanel();
-                            }}
                             onAIBridgeChange={paneTab.id === activeTabId ? setAIEditorBridge : undefined}
                             onAskAI={paneTab.id === activeTabId ? openAIForSelection : undefined}
                           />

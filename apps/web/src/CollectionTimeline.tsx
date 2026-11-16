@@ -1,29 +1,53 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Gantt, Willow, type IApi, type IScaleConfig, type ITask } from "@svar-ui/react-gantt";
+import "@svar-ui/react-gantt/all.css";
 import type { CollectionRow } from "@noty/shared/collection-types";
-import {
-  TIMELINE_DAY_WIDTH,
-  dragSpan,
-  fromDayNumber,
-  headerGroups,
-  headerTicks,
-  rowSpan,
-  timelineRange,
-  toDayNumber,
-  type TimelineScale,
-} from "./timeline";
+import { fromDayNumber, rowSpan, timelineRange, toDayNumber, type TimelineScale } from "./timeline";
 
 const SCALES: Array<{ scale: TimelineScale; label: string }> = [
   { scale: "day", label: "일" },
   { scale: "week", label: "주" },
   { scale: "month", label: "월" },
 ];
-const ROW_HEIGHT = 34;
 
-type Drag = { rowId: string; mode: "move" | "start" | "end"; x: number; delta: number };
+const monthLabel = (d: Date) => `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+const SCALE_CONFIG: Record<TimelineScale, { cellWidth: number; scales: IScaleConfig[] }> = {
+  day: {
+    cellWidth: 34,
+    scales: [
+      { unit: "month", step: 1, format: monthLabel },
+      { unit: "day", step: 1, format: (d: Date) => String(d.getDate()) },
+    ],
+  },
+  week: {
+    cellWidth: 90,
+    scales: [
+      { unit: "month", step: 1, format: monthLabel },
+      { unit: "week", step: 1, format: (d: Date) => `${d.getMonth() + 1}/${d.getDate()}` },
+    ],
+  },
+  month: {
+    cellWidth: 110,
+    scales: [
+      { unit: "year", step: 1, format: (d: Date) => `${d.getFullYear()}년` },
+      { unit: "month", step: 1, format: (d: Date) => `${d.getMonth() + 1}월` },
+    ],
+  },
+};
+
+const ROW_HEIGHT = 36;
+const SCALE_HEIGHT = 30;
+const COLUMNS = [{ id: "text", header: "이름", flexgrow: 1 }];
+
+/** 일 번호 → 그날 0시(현지 시각) */
+const toLocalDate = (day: number) => new Date(`${fromDayNumber(day)}T00:00:00`);
+/** 현지 시각 Date → 일 번호 */
+const localDay = (date: Date) =>
+  toDayNumber(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`)!;
 
 /**
- * 타임라인(간트) 뷰: 시작·끝 날짜 속성으로 가로 막대를 그린다.
- * 막대를 끌면 옮기고, 양 끝을 끌면 기간을 바꾼다. 날짜 없는 행은 줄을 누르면 그날로 잡힌다.
+ * 타임라인(간트) 뷰. 그리기·끌기는 SVAR Gantt 가 맡고, 이 컴포넌트는 행 ⇄ 작업 변환과 저장만 한다.
+ * 데이터베이스의 끝 날짜는 그날을 포함하고, SVAR 의 end 는 다음 날 0시(포함 안 함)라 하루씩 맞춘다.
  */
 export function CollectionTimeline({
   rows,
@@ -38,75 +62,82 @@ export function CollectionTimeline({
   /** 없으면 시작 날짜 하루짜리 막대 */
   endPropertyId?: string;
   onChangeDates: (row: CollectionRow, start: string, end: string) => void;
-  onOpenRow: (row: CollectionRow, event?: React.MouseEvent) => void;
+  onOpenRow: (row: CollectionRow) => void;
   onAddRow: (start: string) => void;
 }) {
   const [scale, setScale] = useState<TimelineScale>("week");
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const today = useMemo(() => toDayNumber(new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString())!, []);
-  const dayWidth = TIMELINE_DAY_WIDTH[scale];
+  const apiRef = useRef<IApi | null>(null);
+  const today = useMemo(() => localDay(new Date()), []);
 
-  const items = rows.map((row) => ({
-    row,
-    span: rowSpan(row.values?.[startPropertyId], endPropertyId ? row.values?.[endPropertyId] : undefined),
-  }));
-  const spans = items.flatMap((item) => (item.span ? [item.span] : []));
-  const range = timelineRange(spans, today, scale);
-  const totalDays = range.end - range.start + 1;
-  const x = (day: number) => (day - range.start) * dayWidth;
+  const scheduled = rows.flatMap((row) => {
+    const span = rowSpan(row.values?.[startPropertyId], endPropertyId ? row.values?.[endPropertyId] : undefined);
+    return span ? [{ row, span }] : [];
+  });
+  const unscheduled = rows.filter((row) => !rowSpan(row.values?.[startPropertyId], undefined));
+  // 9999년 같은 날짜가 있어도 오늘 ±5년 안만 그린다
+  const range = timelineRange(
+    scheduled.map((item) => item.span),
+    today,
+    scale,
+  );
+  const visible = scheduled.filter(({ span }) => span.end >= range.start && span.start <= range.end);
 
-  // 기간 앞쪽이 바뀌면(막대를 옮겨서) 스크롤을 그만큼 보정해 화면이 밀리지 않게 한다
-  const prevStart = useRef(range.start);
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el && prevStart.current !== range.start) el.scrollLeft -= (range.start - prevStart.current) * dayWidth;
-    prevStart.current = range.start;
-  }, [range.start, dayWidth]);
+  const tasks: ITask[] = useMemo(
+    () =>
+      visible.map(({ row, span }) => ({
+        id: row.id,
+        text: `${row.icon ? `${row.icon} ` : ""}${row.title || "제목 없음"}`,
+        start: toLocalDate(Math.max(span.start, range.start)),
+        end: toLocalDate(Math.min(span.end, range.end) + 1),
+        type: "task",
+        progress: 0,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(visible.map(({ row, span }) => [row.id, row.title, row.icon, span])), range.start, range.end],
+  );
 
-  // 처음 열 때와 단위를 바꿀 때 오늘이 보이게 한다
+  // init 은 한 번만 불리므로 최신 값은 ref 로 읽는다
+  const latest = useRef({ rows, onChangeDates, onOpenRow, endPropertyId });
+  latest.current = { rows, onChangeDates, onOpenRow, endPropertyId };
+
+  const init = (api: IApi) => {
+    apiRef.current = api;
+    // 막대 끌기·늘이기가 끝나면 데이터베이스 날짜로 저장한다
+    api.on("update-task", (ev) => {
+      if (ev.inProgress) return;
+      const task = api.getTask(ev.id);
+      const row = latest.current.rows.find((r) => r.id === ev.id);
+      if (!row || !task?.start || !task.end) return;
+      const start = fromDayNumber(localDay(task.start));
+      // 끝 날짜 속성이 없으면 하루짜리라 시작만 옮긴다
+      const end = latest.current.endPropertyId ? fromDayNumber(Math.max(localDay(task.end) - 1, localDay(task.start))) : start;
+      const prevStart = row.values?.[startPropertyId];
+      const prevEnd = latest.current.endPropertyId ? row.values?.[latest.current.endPropertyId] : start;
+      if (start !== prevStart || end !== prevEnd) latest.current.onChangeDates(row, start, end);
+    });
+    // SVAR 자체 편집 창 대신 Noty 행 상세를 연다
+    api.intercept("show-editor", ({ id }) => {
+      const row = latest.current.rows.find((r) => r.id === id);
+      if (row) latest.current.onOpenRow(row);
+      return false;
+    });
+    // 행 추가·삭제·순서·연결선은 데이터베이스 쪽에서만 한다
+    for (const action of ["add-task", "delete-task", "move-task", "copy-task", "indent-task", "add-link"] as const) {
+      api.intercept(action, () => false);
+    }
+  };
+
+  const scrollToToday = () => void apiRef.current?.exec("scroll-chart", { date: toLocalDate(today - (scale === "day" ? 7 : scale === "week" ? 21 : 60)) });
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollLeft = Math.max(0, x(today) - el.clientWidth / 3);
+    // 처음과 단위를 바꿀 때 오늘 근처를 보여 준다 (그리기가 끝난 뒤)
+    const timer = window.setTimeout(scrollToToday, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scale]);
 
-  useEffect(() => {
-    if (!drag) return;
-    const onMove = (event: PointerEvent) =>
-      setDrag((current) => current && { ...current, delta: Math.round((event.clientX - current.x) / dayWidth) });
-    // 효과가 렌더마다 다시 걸리므로 drag 는 늘 최신 값이다
-    const onUp = () => {
-      const item = items.find((i) => i.row.id === drag.rowId);
-      if (item?.span && drag.delta !== 0) {
-        const next = dragSpan(item.span, drag.mode, drag.delta);
-        onChangeDates(item.row, fromDayNumber(next.start), fromDayNumber(next.end));
-      }
-      setDrag(null);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  });
-
-  const startDrag = (event: React.PointerEvent, rowId: string, mode: Drag["mode"]) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setDrag({ rowId, mode, x: event.clientX, delta: 0 });
-  };
-
-  const dayAt = (event: React.MouseEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return range.start + Math.floor((event.clientX - rect.left) / dayWidth);
-  };
-
-  const ticks = headerTicks(range, scale);
-  const groups = headerGroups(range, scale);
-  const width = totalDays * dayWidth;
+  const config = SCALE_CONFIG[scale];
+  // 머리글 두 줄 + 행 + 가로 스크롤바
+  const height = Math.min(560, SCALE_HEIGHT * 2 + Math.max(tasks.length, 3) * ROW_HEIGHT + 20);
 
   return (
     <div className="ndb-timeline">
@@ -125,104 +156,55 @@ export function CollectionTimeline({
           ))}
         </div>
         <div className="ndb-calendar__nav">
-          <button
-            type="button"
-            onClick={() => {
-              const el = scrollRef.current;
-              if (el) el.scrollTo({ left: Math.max(0, x(today) - el.clientWidth / 3), behavior: "smooth" });
-            }}
-          >
+          <button type="button" onClick={scrollToToday}>
             오늘
           </button>
-        </div>
-      </div>
-
-      <div className="ndb-timeline__frame">
-        <div className="ndb-timeline__names">
-          <div className="ndb-timeline__names-head">이름</div>
-          {items.map(({ row }) => (
-            <button key={row.id} type="button" className="ndb-timeline__name" style={{ height: ROW_HEIGHT }} onClick={(e) => onOpenRow(row, e)}>
-              <span>{row.icon || "📄"}</span>
-              <span className="ndb-timeline__name-text">{row.title || "제목 없음"}</span>
-            </button>
-          ))}
-          <button type="button" className="ndb-timeline__new" style={{ height: ROW_HEIGHT }} onClick={() => onAddRow(fromDayNumber(today))}>
+          <button type="button" onClick={() => onAddRow(fromDayNumber(today))}>
             + 새로 만들기
           </button>
         </div>
+      </div>
 
-        <div className="ndb-timeline__scroll" ref={scrollRef}>
-          <div style={{ width, position: "relative" }}>
-            <div className="ndb-timeline__head">
-              <div className="ndb-timeline__groups">
-                {groups.map((g) => (
-                  <span key={g.day} style={{ left: x(g.day), width: g.days * dayWidth }}>
-                    {g.label}
-                  </span>
-                ))}
-              </div>
-              <div className="ndb-timeline__ticks">
-                {ticks.map((t) => (
-                  <span
-                    key={t.day}
-                    className={t.day === today ? "ndb-timeline__tick--today" : undefined}
-                    style={{ left: x(t.day), width: scale === "day" ? dayWidth : undefined }}
-                  >
-                    {t.label}
-                  </span>
-                ))}
-              </div>
-            </div>
+      <div className="ndb-timeline__frame" style={{ height }}>
+        <Willow fonts={false}>
+          <Gantt
+            key={scale}
+            init={init}
+            tasks={tasks}
+            links={[]}
+            columns={COLUMNS}
+            scales={config.scales}
+            cellWidth={config.cellWidth}
+            cellHeight={ROW_HEIGHT}
+            scaleHeight={SCALE_HEIGHT}
+            lengthUnit="day"
+            durationUnit="day"
+            start={toLocalDate(range.start)}
+            end={toLocalDate(range.end + 1)}
+            highlightTime={(date: Date, unit: string) => {
+              if (unit !== "day") return "";
+              const day = localDay(date);
+              if (day === today) return "ndb-timeline__today";
+              return date.getDay() === 0 || date.getDay() === 6 ? "ndb-timeline__weekend" : "";
+            }}
+          />
+        </Willow>
+      </div>
 
-            <div className="ndb-timeline__body" style={{ height: (items.length + 1) * ROW_HEIGHT }}>
-              {ticks.map((t) => (
-                <div key={t.day} className="ndb-timeline__gridline" style={{ left: x(t.day) }} />
-              ))}
-              <div className="ndb-timeline__today" style={{ left: x(today) + dayWidth / 2 }} />
-              {items.map(({ row, span }, index) => {
-                const live = span && drag?.rowId === row.id ? dragSpan(span, drag.mode, drag.delta) : span;
-                return (
-                  <div
-                    key={row.id}
-                    className={`ndb-timeline__lane ${span ? "" : "ndb-timeline__lane--unscheduled"}`}
-                    style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT }}
-                    title={span ? undefined : "누르면 이 날짜로 일정을 잡습니다"}
-                    onClick={(event) => {
-                      if (span) return;
-                      const day = fromDayNumber(dayAt(event));
-                      onChangeDates(row, day, day);
-                    }}
-                  >
-                    {live && live.end >= range.start && live.start <= range.end && (
-                      <div
-                        className={`ndb-timeline__item ${drag?.rowId === row.id ? "ndb-timeline__item--dragging" : ""}`}
-                        style={{
-                          left: x(Math.max(live.start, range.start)),
-                          width: (Math.min(live.end, range.end) - Math.max(live.start, range.start) + 1) * dayWidth,
-                        }}
-                        title={`${row.title || "제목 없음"} · ${fromDayNumber(live.start)}${live.end > live.start ? ` → ${fromDayNumber(live.end)}` : ""}`}
-                        onPointerDown={(e) => startDrag(e, row.id, "move")}
-                        onDoubleClick={(e) => onOpenRow(row, e)}
-                      >
-                        {endPropertyId && (
-                          <span className="ndb-timeline__handle ndb-timeline__handle--start" onPointerDown={(e) => startDrag(e, row.id, "start")} />
-                        )}
-                        <span className="ndb-timeline__item-label">
-                          {row.icon ? `${row.icon} ` : ""}
-                          {row.title || "제목 없음"}
-                        </span>
-                        {endPropertyId && (
-                          <span className="ndb-timeline__handle ndb-timeline__handle--end" onPointerDown={(e) => startDrag(e, row.id, "end")} />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+      {unscheduled.length > 0 && (
+        <div className="ndb-calendar__unscheduled">
+          <span>날짜 없음 ({unscheduled.length})</span>
+          <div className="ndb-calendar__unscheduled-list">
+            {unscheduled.map((row) => (
+              <button key={row.id} type="button" className="ndb-calendar__event" onClick={() => onOpenRow(row)}>
+                <span>{row.icon || "📄"}</span>
+                <span>{row.title || "제목 없음"}</span>
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      )}
+      <p className="ndb-timeline__hint">막대를 끌어 옮기고 양 끝을 끌어 기간을 바꿉니다. 두 번 누르면 상세가 열립니다.</p>
     </div>
   );
 }

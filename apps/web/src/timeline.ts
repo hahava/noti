@@ -4,8 +4,6 @@ const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 5 * 366;
 
 export type TimelineScale = "day" | "week" | "month";
-/** 하루의 가로 폭(px) */
-export const TIMELINE_DAY_WIDTH: Record<TimelineScale, number> = { day: 36, week: 14, month: 4 };
 
 export function toDayNumber(iso: unknown): number | null {
   if (typeof iso !== "string") return null;
@@ -43,40 +41,4 @@ export function timelineRange(spans: Array<{ start: number; end: number }>, toda
   start = Math.floor(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1) / DAY_MS);
   end = Math.floor(Date.UTC(e.getUTCFullYear(), e.getUTCMonth() + 1, 0) / DAY_MS);
   return { start, end };
-}
-
-/** 끌기 결과: 이동은 둘 다, 양 끝 조절은 한쪽만 옮기고 끝이 시작보다 앞서지 않게 한다. */
-export function dragSpan(
-  span: { start: number; end: number },
-  mode: "move" | "start" | "end",
-  deltaDays: number,
-): { start: number; end: number } {
-  if (mode === "move") return { start: span.start + deltaDays, end: span.end + deltaDays };
-  if (mode === "start") return { start: Math.min(span.start + deltaDays, span.end), end: span.end };
-  return { start: span.start, end: Math.max(span.end + deltaDays, span.start) };
-}
-
-/** 머리글 칸: 일 단위는 날짜, 주 단위는 월요일, 월 단위는 1일마다 */
-export function headerTicks(range: { start: number; end: number }, scale: TimelineScale): Array<{ day: number; label: string }> {
-  const ticks: Array<{ day: number; label: string }> = [];
-  for (let day = range.start; day <= range.end; day++) {
-    const date = new Date(day * DAY_MS);
-    if (scale === "day") ticks.push({ day, label: String(date.getUTCDate()) });
-    else if (scale === "week" && date.getUTCDay() === 1) ticks.push({ day, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
-    else if (scale === "month" && date.getUTCDate() === 1) ticks.push({ day, label: `${date.getUTCMonth() + 1}월` });
-  }
-  return ticks;
-}
-
-/** 위쪽 머리글: 일·주 단위는 달, 월 단위는 해 */
-export function headerGroups(range: { start: number; end: number }, scale: TimelineScale): Array<{ day: number; days: number; label: string }> {
-  const groups: Array<{ day: number; days: number; label: string }> = [];
-  for (let day = range.start; day <= range.end; day++) {
-    const date = new Date(day * DAY_MS);
-    const label = scale === "month" ? `${date.getUTCFullYear()}년` : `${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월`;
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.days++;
-    else groups.push({ day, days: 1, label });
-  }
-  return groups;
 }

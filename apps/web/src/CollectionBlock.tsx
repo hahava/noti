@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, createContext, lazy, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createReactBlockSpec, useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -19,7 +19,8 @@ import { createDefaultCollectionData, migrateLegacyCollectionData, MULTI_VALUE_S
 import { computeColumnCalculation, computePropertyValue } from "@noty/shared/collection-computed";
 import { getStoredAuthSession, resolveUploadUrl, workspaceApi } from "./api";
 import { resolveCollaborationWsUrl } from "./collaboration-url";
-import { CollectionTimeline } from "./CollectionTimeline";
+// 간트 라이브러리(SVAR)는 크니까 타임라인 뷰를 열 때만 불러온다
+const CollectionTimeline = lazy(() => import("./CollectionTimeline").then((m) => ({ default: m.CollectionTimeline })));
 export { createDefaultCollectionData } from "@noty/shared/collection-schema";
 
 import type {
@@ -3541,6 +3542,7 @@ function CollectionBlockComponent({
           )}
         </div>
       ) : activeView.mode === "timeline" && dateProperty ? (
+        <Suspense fallback={<div className="ndb-timeline" aria-busy="true" />}>
         <CollectionTimeline
           rows={filteredAndSortedRows}
           startPropertyId={dateProperty.id}
@@ -3565,6 +3567,7 @@ function CollectionBlockComponent({
           onOpenRow={openRow}
           onAddRow={(start) => handleAddRow({ [dateProperty.id]: start }, { openAfterCreate: true })}
         />
+        </Suspense>
       ) : activeView.mode === "calendar" || activeView.mode === "timeline" ? (
         <div className="ndb-calendar">
           {!dateProperty ? (
