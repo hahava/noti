@@ -1715,7 +1715,7 @@
   gap: 6px;
 }
 
-/* 타임라인(간트) 뷰: 그리기는 SVAR Gantt(Willow 테마), 여기서는 Noty 색·글꼴로 맞춘다 */
+/* 타임라인(간트) 뷰: 노션처럼 이름 칸 없이 카드 막대에 제목을 쓴다 */
 .ndb-timeline {
   padding: 8px 0 14px;
 }
@@ -1724,65 +1724,245 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #37352f;
 }
 
-.ndb-calendar__nav button.ndb-timeline__scale--active {
-  background: rgba(55, 53, 47, 0.08);
+.ndb-timeline__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ndb-timeline__scales {
+  display: flex;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.ndb-timeline__scales button {
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #787774;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ndb-timeline__scales button[aria-pressed="true"] {
+  background: #fff;
   color: #37352f;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12);
 }
 
 .ndb-timeline__frame {
-  border: 1px solid #e9e9e7;
-  border-radius: 8px;
-  overflow: hidden;
+  position: relative;
+  border-top: 1px solid #e9e9e7;
+  border-bottom: 1px solid #e9e9e7;
+  font-size: 12.5px;
 }
 
-.ndb-timeline__frame .wx-willow-theme {
-  height: 100%;
-  --wx-font-family: var(--ds-font-sans);
-  --wx-font-size: 13px;
-  --wx-font-size-sm: 12px;
-  --wx-color-font: #37352f;
-  --wx-color-primary: #2383e2;
-  --wx-background: #fff;
-  --wx-gantt-border: 1px solid #ededeb;
-  --wx-gantt-border-color: #ededeb;
-  --wx-grid-body-row-border: 1px solid #f1f1ef;
-  --wx-grid-body-cell-border: none;
-  --wx-grid-header-font: 500 12px var(--ds-font-sans);
-  --wx-grid-header-text-transform: none;
-  --wx-gantt-task-color: #d6e8fa;
-  --wx-gantt-task-fill-color: #b9d7f5;
-  --wx-gantt-task-border-color: #9cc5ee;
-  --wx-gantt-task-font-color: #1d3f63;
-  --wx-gantt-bar-border-radius: 6px;
-  --wx-gantt-bar-shadow: none;
-  --wx-gantt-select-color: rgba(35, 131, 226, 0.08);
-  --wx-gantt-holiday-background: #fafaf9;
+.ndb-timeline__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
-/* 연결선·진행률은 쓰지 않는다 (데이터베이스에 저장할 곳이 없음) */
-.ndb-timeline__frame .wx-bar .wx-link,
-.ndb-timeline__frame .wx-bar .wx-progress-marker,
-.ndb-timeline__frame .wx-bar .wx-progress-percent {
-  display: none;
+.ndb-timeline__head {
+  position: relative;
+  border-bottom: 1px solid #e9e9e7;
 }
 
-.ndb-timeline__frame .ndb-timeline__weekend {
-  background: #fafaf9;
-}
-
-.ndb-timeline__frame .ndb-timeline__today {
-  background: rgba(235, 87, 87, 0.08);
-  box-shadow: inset 2px 0 0 rgba(235, 87, 87, 0.65);
-}
-
-.ndb-timeline__hint {
-  margin: 8px 2px 0;
-  color: #9b9a97;
+.ndb-timeline__group,
+.ndb-timeline__tick {
+  position: absolute;
+  white-space: nowrap;
   font-size: 11.5px;
+  color: #9b9a97;
+}
+
+.ndb-timeline__group {
+  top: 6px;
+  padding-left: 8px;
+  color: #787774;
+}
+
+.ndb-timeline__tick {
+  bottom: 4px;
+  display: flex;
+  justify-content: center;
+}
+
+.ndb-timeline__tick i {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-style: normal;
+}
+
+.ndb-timeline__tick--today i {
+  background: #eb5757;
+  color: #fff;
+  font-weight: 600;
+}
+
+.ndb-timeline__body {
+  position: relative;
+  background-repeat: repeat-x;
+}
+
+.ndb-timeline__today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid #eb5757;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ndb-timeline__lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.ndb-timeline__lane:hover {
+  background: rgba(55, 53, 47, 0.025);
+}
+
+/* 날짜 없는 행·새 항목 줄: 제목은 화면 왼쪽에 붙어 따라온다 */
+.ndb-timeline__unscheduled {
+  position: sticky;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  color: #b4b3af;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ndb-timeline__lane:has(.ndb-timeline__unscheduled) {
+  cursor: pointer;
+}
+
+.ndb-timeline__ghost {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #c7c6c2;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #9b9a97;
+  pointer-events: none;
+}
+
+.ndb-timeline__item {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: rgba(15, 15, 15, 0.1) 0 0 0 1px, rgba(15, 15, 15, 0.08) 0 2px 4px;
+  color: #37352f;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  z-index: 1;
+}
+
+.ndb-timeline__item:hover {
+  background: #f9f9f8;
+}
+
+.ndb-timeline__item--dragging {
+  cursor: grabbing;
+  box-shadow: rgba(15, 15, 15, 0.12) 0 0 0 1px, rgba(15, 15, 15, 0.18) 0 6px 14px;
+  z-index: 3;
+}
+
+.ndb-timeline__label {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ndb-timeline__label--outside {
+  position: absolute;
+  left: 100%;
+  padding-left: 8px;
+  overflow: visible;
+  color: #5a5853;
+}
+
+.ndb-timeline__handle {
+  flex: 0 0 7px;
+  align-self: stretch;
+  cursor: col-resize;
+}
+
+.ndb-timeline__handle::after {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 14px;
+  margin: 8px 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.ndb-timeline__item:hover .ndb-timeline__handle::after {
+  background: rgba(55, 53, 47, 0.2);
+}
+
+.ndb-timeline__jump {
+  position: absolute;
+  max-width: 160px;
+  height: 22px;
+  padding: 0 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: rgba(15, 15, 15, 0.1) 0 0 0 1px, rgba(15, 15, 15, 0.08) 0 2px 4px;
+  color: #787774;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.ndb-timeline__jump:hover {
+  color: #37352f;
+}
+
+.ndb-timeline__jump--left {
+  left: 6px;
+}
+
+.ndb-timeline__jump--right {
+  right: 6px;
 }
 
 /* ==========================================================================

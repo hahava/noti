@@ -17,7 +17,6 @@
     "@mantine/hooks": "^8.3.0",
     "@mantine/utils": "^6.0.22",
     "@noty/shared": "*",
-    "@svar-ui/react-gantt": "2.8.2",
     "@xyflow/react": "12.12.0",
     "d3-drag": "3.0.0",
     "d3-force": "3.0.0",
