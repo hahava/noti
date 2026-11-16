@@ -209,6 +209,7 @@ function parseCollectionData(raw: string): CollectionData {
           id: typeof row?.id === "string" ? row.id : `row-${index + 1}`,
           title: typeof row?.title === "string" ? row.title : "",
           ...(typeof row?.icon === "string" && row.icon ? { icon: row.icon } : {}),
+          ...(OPTION_COLOR_PALETTE.includes(row?.color as CollectionOptionColor) ? { color: row.color } : {}),
           ...(parsed.schemaVersion === 2
             ? {}
             : {
@@ -3569,6 +3570,7 @@ function CollectionBlockComponent({
             }));
           }}
           onOpenRow={openRow}
+          onChangeColor={(row, color) => handleUpdateRow(row.id, { color })}
           onAddRow={(start) => handleAddRow({ [dateProperty.id]: start }, { openAfterCreate: true })}
         />
       ) : activeView.mode === "calendar" || activeView.mode === "timeline" ? (

@@ -313,3 +313,16 @@ test("timeline view mode and end date property sync in Yjs", () => {
   merge(left, right);
   assert.equal(readCollectionMap(leftMap)!.views[1].endDatePropertyId, undefined);
 });
+
+test("row color syncs and clears in Yjs", () => {
+  const { left, right, leftMap, rightMap } = pair();
+  const base = readCollectionMap(leftMap)!;
+  patchCollectionMap(leftMap, base, { ...base, rows: base.rows.map((r) => (r.id === "a" ? { ...r, color: "blue" as const } : r)) });
+  merge(left, right);
+  const synced = readCollectionMap(rightMap)!;
+  assert.equal(synced.rows[0].color, "blue");
+  assert.equal(synced.rows[1].color, undefined);
+  patchCollectionMap(rightMap, synced, { ...synced, rows: synced.rows.map((r) => ({ ...r, color: undefined })) });
+  merge(left, right);
+  assert.equal(readCollectionMap(leftMap)!.rows[0].color, undefined);
+});

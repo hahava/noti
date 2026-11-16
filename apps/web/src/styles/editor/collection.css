@@ -1897,8 +1897,11 @@
   z-index: 3;
 }
 
+/* 긴 막대의 앞쪽이 화면 밖으로 나가도 제목은 보이는 쪽에 붙어 따라온다 */
 .ndb-timeline__label {
-  flex: 1;
+  position: sticky;
+  left: 0;
+  max-width: 100%;
   min-width: 0;
   padding: 0 10px;
   overflow: hidden;
@@ -1913,6 +1916,67 @@
   padding-left: 12px;
   overflow: visible;
   color: #5a5853;
+}
+
+.ndb-timeline__swatch {
+  background: #fff;
+}
+
+/* 막대 색 (우클릭 → 색상). 데이터베이스 선택 옵션과 같은 여섯 가지 */
+.ndb-timeline__item--gray,
+.ndb-timeline__item--gray:hover {
+  background: #ededeb;
+}
+.ndb-timeline__item--blue,
+.ndb-timeline__item--blue:hover {
+  background: #d8ebfb;
+}
+.ndb-timeline__item--green,
+.ndb-timeline__item--green:hover {
+  background: #dbf0e1;
+}
+.ndb-timeline__item--amber,
+.ndb-timeline__item--amber:hover {
+  background: #fdecb3;
+}
+.ndb-timeline__item--purple,
+.ndb-timeline__item--purple:hover {
+  background: #eadcfd;
+}
+.ndb-timeline__item--rose,
+.ndb-timeline__item--rose:hover {
+  background: #ffd6da;
+}
+.ndb-timeline__item[class*="ndb-timeline__item--"]:hover {
+  filter: brightness(0.97);
+}
+
+.ndb-timeline__colors {
+  position: fixed;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: rgba(15, 15, 15, 0.05) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+  z-index: 100;
+}
+
+.ndb-timeline__swatch {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  box-shadow: rgba(15, 15, 15, 0.16) 0 0 0 1px;
+  cursor: pointer;
+}
+
+.ndb-timeline__swatch:hover {
+  transform: scale(1.1);
+}
+
+.ndb-timeline__swatch[aria-checked="true"] {
+  box-shadow: #2383e2 0 0 0 2px;
 }
 
 /* 양 끝 손잡이는 막대 가장자리에 걸쳐 둔다. 좁은 막대는 가운데를 끌어 옮길 수 있게 바깥으로 뺀다 */

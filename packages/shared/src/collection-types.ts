@@ -79,6 +79,8 @@ export interface CollectionRow {
   id: string;
   title: string;
   icon?: string;
+  /** 타임라인 막대 색 (없으면 기본 흰색) */
+  color?: CollectionOptionColor;
   status?: CollectionStatus;
   tags?: string[];
   date?: string;

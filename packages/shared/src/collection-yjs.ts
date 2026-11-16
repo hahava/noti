@@ -284,7 +284,7 @@ function patchRow(record: RecordMap, before: CollectionRow | undefined, after: C
     editText(record, "text", before?.text ?? "", after.text ?? "");
     if (after.text === undefined) record.delete("text");
   }
-  for (const key of ["icon", "status", "date", "checked", "linkedPageId"] as const) {
+  for (const key of ["icon", "color", "status", "date", "checked", "linkedPageId"] as const) {
     if (!before || before[key] !== after[key]) {
       if (after[key] === undefined || after[key] === "") record.delete(key);
       else record.set(key, after[key]);
@@ -514,10 +514,12 @@ export function readCollectionMap(map: RecordMap): CollectionData | null {
     ? orderedIds(map.get("rowOrder") as Y.Array<string> | undefined, rows).map((id) => {
         const value = rows.get(id)!;
         const icon = stringValue(value.get("icon"));
+        const color = stringValue(value.get("color")) as CollectionRow["color"];
         return {
           id,
           title: (value.get("title") as Y.Text | undefined)?.toString() ?? "",
           ...(icon ? { icon } : {}),
+          ...(color ? { color } : {}),
           ...(value.has("status") ? { status: stringValue(value.get("status")) as CollectionRow["status"] } : {}),
           ...(value.has("tags") ? { tags: Array.from(new Set((value.get("tags") as Y.Array<string>).toArray())) } : {}),
           ...(value.has("date") ? { date: stringValue(value.get("date")) } : {}),

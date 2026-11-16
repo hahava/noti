@@ -84,6 +84,7 @@ export function migrateLegacyCollectionData(data: CollectionData): CollectionDat
     id: row.id,
     title: row.title,
     ...(row.icon ? { icon: row.icon } : {}),
+    ...(row.color ? { color: row.color } : {}),
     ...(row.linkedPageId ? { linkedPageId: row.linkedPageId } : {}),
     values: {
       ...row.values,

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CollectionRow } from "@noty/shared/collection-types";
+import type { CollectionOptionColor, CollectionRow } from "@noty/shared/collection-types";
 import {
   TIMELINE_DAY_WIDTH,
   dayDate,
@@ -19,16 +19,28 @@ const SCALES: Array<{ scale: TimelineScale; label: string }> = [
   { scale: "quarter", label: "분기" },
   { scale: "year", label: "연" },
 ];
+const COLORS: Array<{ color: CollectionOptionColor | undefined; label: string }> = [
+  { color: undefined, label: "기본" },
+  { color: "gray", label: "회색" },
+  { color: "blue", label: "파랑" },
+  { color: "green", label: "초록" },
+  { color: "amber", label: "노랑" },
+  { color: "purple", label: "보라" },
+  { color: "rose", label: "빨강" },
+];
 const LANE = 40;
 const HEAD = 50;
-/** 이보다 좁은 막대는 제목을 막대 오른쪽에 쓴다 */
-const LABEL_INSIDE_MIN = 56;
+/**
+ * 제목이 막대 안에 다 들어가지 않으면 잘라 쓰지 않고 막대 오른쪽에 쓴다.
+ * shortcut: 글자 수로 폭을 어림한다(한글·이모지 13px, 그 외 7.5px), 어긋남이 눈에 띄면 canvas measureText 로 바꾼다.
+ */
+const labelWidth = (title: string) => 22 + [...title].reduce((sum, ch) => sum + (ch.codePointAt(0)! > 0x2e7f ? 13 : 7.5), 0);
 
 type Drag = { rowId: string; mode: "move" | "start" | "end"; x: number; delta: number; moved: boolean };
 
 /**
  * 타임라인(간트) 뷰. 노션처럼 이름 칸 없이 카드 막대에 제목을 쓴다.
- * 막대: 누르면 상세, 끌면 이동, 양 끝을 끌면 기간 변경. 날짜 없는 행과 맨 아래 빈 줄은 누른 날짜로 일정을 잡는다.
+ * 막대: 누르면 상세, 끌면 이동, 양 끝을 끌면 기간 변경, 우클릭하면 색상. 날짜 없는 행과 맨 아래 빈 줄은 누른 날짜로 일정을 잡는다.
  */
 export function CollectionTimeline({
   rows,
@@ -36,6 +48,7 @@ export function CollectionTimeline({
   endPropertyId,
   onChangeDates,
   onOpenRow,
+  onChangeColor,
   onAddRow,
 }: {
   rows: CollectionRow[];
@@ -44,12 +57,26 @@ export function CollectionTimeline({
   endPropertyId?: string;
   onChangeDates: (row: CollectionRow, start: string, end: string) => void;
   onOpenRow: (row: CollectionRow) => void;
+  onChangeColor: (row: CollectionRow, color: CollectionOptionColor | undefined) => void;
   onAddRow: (start: string) => void;
 }) {
   const [scale, setScale] = useState<TimelineScale>("month");
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<{ lane: string; day: number } | null>(null);
   const [view, setView] = useState({ left: 0, width: 0 });
+  const [colorMenu, setColorMenu] = useState<{ rowId: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!colorMenu) return;
+    const close = () => setColorMenu(null);
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && close();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [colorMenu]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = useMemo(() => toDayNumber(new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString())!, []);
   const dayWidth = TIMELINE_DAY_WIDTH[scale];
@@ -222,6 +249,7 @@ export function CollectionTimeline({
                 const live = !inRange ? null : drag?.rowId === row.id && drag.moved ? dragSpan(span, drag.mode, drag.delta) : span;
                 const barWidth = live ? Math.max((live.end - live.start + 1) * dayWidth, 10) : 0;
                 const title = `${row.icon ? `${row.icon} ` : ""}${row.title || "제목 없음"}`;
+                const outside = barWidth < labelWidth(title);
                 return (
                   <div
                     key={row.id}
@@ -239,13 +267,17 @@ export function CollectionTimeline({
                     {!span && ghost(row.id)}
                     {live && (
                       <div
-                        className={`ndb-timeline__item ${barWidth < LABEL_INSIDE_MIN ? "ndb-timeline__item--narrow" : ""} ${drag?.rowId === row.id && drag.moved ? "ndb-timeline__item--dragging" : ""}`}
+                        className={`ndb-timeline__item ${row.color ? `ndb-timeline__item--${row.color}` : ""} ${barWidth < 44 ? "ndb-timeline__item--narrow" : ""} ${drag?.rowId === row.id && drag.moved ? "ndb-timeline__item--dragging" : ""}`}
                         style={{ left: x(live.start), width: barWidth }}
                         title={`${title} · ${fromDayNumber(live.start)}${live.end > live.start ? ` → ${fromDayNumber(live.end)}` : ""}`}
                         onPointerDown={(e) => startDrag(e, row.id, "move")}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setColorMenu({ rowId: row.id, x: e.clientX, y: e.clientY });
+                        }}
                       >
                         <span className="ndb-timeline__handle ndb-timeline__handle--start" onPointerDown={(e) => startDrag(e, row.id, "start")} />
-                        <span className={`ndb-timeline__label ${barWidth < LABEL_INSIDE_MIN ? "ndb-timeline__label--outside" : ""}`}>{title}</span>
+                        <span className={`ndb-timeline__label ${outside ? "ndb-timeline__label--outside" : ""}`}>{title}</span>
                         <span className="ndb-timeline__handle ndb-timeline__handle--end" onPointerDown={(e) => startDrag(e, row.id, "end")} />
                       </div>
                     )}
@@ -264,6 +296,39 @@ export function CollectionTimeline({
             </div>
           </div>
         </div>
+
+        {colorMenu && (
+          <div
+            className="ndb-timeline__colors"
+            role="menu"
+            aria-label="막대 색상"
+            style={{ left: colorMenu.x, top: colorMenu.y }}
+            // preventDefault: 편집기가 mousedown 으로 블록을 다시 그리면 메뉴가 닫혀 버린다
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {COLORS.map(({ color, label }) => {
+              const row = rows.find((r) => r.id === colorMenu.rowId);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={row?.color === color}
+                  aria-label={label}
+                  title={label}
+                  className={`ndb-timeline__swatch ${color ? `ndb-timeline__item--${color}` : ""}`}
+                  onClick={() => {
+                    if (row) onChangeColor(row, color);
+                    setColorMenu(null);
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
 
         {/* 화면 밖에 있는 막대: 가장자리 화살표를 누르면 그쪽으로 간다 */}
         {items.map(({ row, span }, index) => {
