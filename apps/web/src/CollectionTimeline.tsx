@@ -40,7 +40,7 @@ export function CollectionTimeline({
 }: {
   rows: CollectionRow[];
   startPropertyId: string;
-  /** 없으면 시작 날짜 하루짜리 막대 */
+  /** 없으면 하루짜리 막대로 그린다. 막대를 늘이면 onChangeDates 가 끝 날짜 속성을 만든다 */
   endPropertyId?: string;
   onChangeDates: (row: CollectionRow, start: string, end: string) => void;
   onOpenRow: (row: CollectionRow) => void;
@@ -239,14 +239,14 @@ export function CollectionTimeline({
                     {!span && ghost(row.id)}
                     {live && (
                       <div
-                        className={`ndb-timeline__item ${drag?.rowId === row.id && drag.moved ? "ndb-timeline__item--dragging" : ""}`}
+                        className={`ndb-timeline__item ${barWidth < LABEL_INSIDE_MIN ? "ndb-timeline__item--narrow" : ""} ${drag?.rowId === row.id && drag.moved ? "ndb-timeline__item--dragging" : ""}`}
                         style={{ left: x(live.start), width: barWidth }}
                         title={`${title} · ${fromDayNumber(live.start)}${live.end > live.start ? ` → ${fromDayNumber(live.end)}` : ""}`}
                         onPointerDown={(e) => startDrag(e, row.id, "move")}
                       >
-                        {endPropertyId && <span className="ndb-timeline__handle ndb-timeline__handle--start" onPointerDown={(e) => startDrag(e, row.id, "start")} />}
+                        <span className="ndb-timeline__handle ndb-timeline__handle--start" onPointerDown={(e) => startDrag(e, row.id, "start")} />
                         <span className={`ndb-timeline__label ${barWidth < LABEL_INSIDE_MIN ? "ndb-timeline__label--outside" : ""}`}>{title}</span>
-                        {endPropertyId && <span className="ndb-timeline__handle ndb-timeline__handle--end" onPointerDown={(e) => startDrag(e, row.id, "end")} />}
+                        <span className="ndb-timeline__handle ndb-timeline__handle--end" onPointerDown={(e) => startDrag(e, row.id, "end")} />
                       </div>
                     )}
                   </div>

@@ -3545,7 +3545,13 @@ function CollectionBlockComponent({
           rows={filteredAndSortedRows}
           startPropertyId={dateProperty.id}
           endPropertyId={endDateProperty?.id}
-          onChangeDates={(row, start, end) =>
+          onChangeDates={(row, start, end) => {
+            // 끝 날짜 속성이 없는데 막대를 늘이면 속성을 만들어 이 뷰에 잇는다 (날짜 속성 하나로 시작해도 기간을 잡을 수 있게)
+            let endId = endDateProperty?.id;
+            if (!endId && end !== start) {
+              endId = handleCreateProperty("종료일", "date");
+              updateActiveView({ endDatePropertyId: endId });
+            }
             updateData((prev) => ({
               ...prev,
               rows: prev.rows.map((current) =>
@@ -3555,13 +3561,13 @@ function CollectionBlockComponent({
                       values: {
                         ...current.values,
                         [dateProperty.id]: start,
-                        ...(endDateProperty ? { [endDateProperty.id]: end } : {}),
+                        ...(endId ? { [endId]: end } : {}),
                       },
                     }
                   : current,
               ),
-            }))
-          }
+            }));
+          }}
           onOpenRow={openRow}
           onAddRow={(start) => handleAddRow({ [dateProperty.id]: start }, { openAfterCreate: true })}
         />
