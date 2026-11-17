@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { EmojiPicker, randomEmoji } from "./EmojiPicker";
 import {
   BlockNoteEditor,
   BlockNoteSchema,
@@ -195,26 +196,6 @@ function PageIconOrDoc({
   return <DocSvgIcon hasChildren={hasChildren} />;
 }
 
-const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
-  {
-    label: "자주 쓰는 아이콘",
-    emojis: ["📝", "📄", "📌", "💡", "🚀", "✨", "🔥", "✅", "⭐", "🎯", "📚", "🗂️"],
-  },
-  {
-    label: "업무 · 프로젝트",
-    emojis: ["💼", "📅", "📊", "📈", "📋", "🧭", "🛠️", "⚙️", "🧪", "🔍", "📣", "🏆"],
-  },
-  {
-    label: "개발 · 기술",
-    emojis: ["💻", "🖥️", "⌨️", "🐛", "🧩", "🗄️", "🔐", "🌐", "⚡", "🤖", "📦", "🔗"],
-  },
-  {
-    label: "일상 · 아이디어",
-    emojis: ["🌱", "☕", "🎨", "🎵", "🎬", "🏠", "✈️", "💬", "❤️", "🍀", "🌙", "☀️"],
-  },
-];
-
-const ALL_EMOJIS = EMOJI_GROUPS.flatMap((group) => group.emojis);
 
 function ChevronSvgIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -3979,8 +3960,7 @@ export default function App() {
 
   const handleSetRandomEmoji = (pageId: string) => {
     if (isReadOnlyUser) return;
-    const randomEmoji = ALL_EMOJIS[Math.floor(Math.random() * ALL_EMOJIS.length)] ?? "📝";
-    void handleUpdatePageIcon(pageId, randomEmoji);
+    void handleUpdatePageIcon(pageId, randomEmoji());
   };
 
   const handleUpdatePageWidth = (pageId: string, rawWidth: string) => {
@@ -4600,8 +4580,8 @@ export default function App() {
         <div
           className="emoji-picker-popover"
           style={{
-            top: `${Math.min(window.innerHeight - 360, Math.max(12, emojiPicker.y))}px`,
-            left: `${Math.min(window.innerWidth - 320, Math.max(12, emojiPicker.x))}px`,
+            top: `${Math.min(window.innerHeight - 540, Math.max(12, emojiPicker.y))}px`,
+            left: `${Math.min(window.innerWidth - 380, Math.max(12, emojiPicker.x))}px`,
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -4647,32 +4627,7 @@ export default function App() {
             />
           </form>
 
-          <div className="emoji-picker-popover__body">
-            {EMOJI_GROUPS.map((group) => (
-              <div key={group.label} className="emoji-picker-group">
-                <div className="emoji-picker-group__label">{group.label}</div>
-                <div className="emoji-picker-group__grid">
-                  {group.emojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      className={[
-                        "ds-btn ds-btn--ghost emoji-picker-btn",
-                        pagesById.get(emojiPicker.pageId)?.icon === emoji
-                          ? "emoji-picker-btn--selected"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => void handleUpdatePageIcon(emojiPicker.pageId, emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <EmojiPicker onSelect={(emoji) => void handleUpdatePageIcon(emojiPicker.pageId, emoji)} />
         </div>
       )}
 
