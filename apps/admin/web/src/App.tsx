@@ -3,12 +3,14 @@ import { adminApi, getToken, setToken, setUnauthorizedHandler, setupApi, type Ad
 import { AccountsPage } from "./AccountsPage";
 import { ModelsPage } from "./ModelsPage";
 import { SetupWizard } from "./SetupWizard";
+import { SecurityPage } from "./SecurityPage";
 import { SystemPage } from "./SystemPage";
 
-type Section = "accounts" | "models" | "system";
+type Section = "accounts" | "security" | "models" | "system";
 
 const SECTIONS: Array<{ id: Section; label: string; description: string }> = [
   { id: "accounts", label: "계정", description: "계정·역할·로그인 관리" },
+  { id: "security", label: "보안", description: "로그인 시도와 잘못된 토큰 접근 기록" },
   { id: "models", label: "AI 모델", description: "채팅·백그라운드·임베딩 모델과 색인·위키 상태" },
   { id: "system", label: "시스템", description: "스토리지·Redis·DB 설정과 서버 상태" },
 ];
@@ -135,6 +137,7 @@ export function App() {
           <p>{current.description}</p>
         </header>
         {section === "accounts" && <AccountsPage currentUser={user} />}
+        {section === "security" && <SecurityPage />}
         {section === "models" && <ModelsPage />}
         {section === "system" && <SystemPage />}
       </main>

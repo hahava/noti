@@ -4,6 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool } from "@noty/core/db";
 import { LoginThrottle } from "@noty/core/http-security";
+import {
+  classifyLoginFailure,
+  ensureAuthEventTables,
+  getAuthSummary,
+  listAuthEvents,
+  recordAuthEvent,
+  recordTokenProbe,
+  type AuthEventFilter,
+} from "@noty/core/auth-events";
 import { listModels, type ModelPurpose, type ModelVendor } from "@noty/core/ai-models";
 import { testEmbeddingConnection } from "@noty/core/embedding-client";
 import {
@@ -106,7 +115,10 @@ function bearerToken(req: IncomingMessage): string | null {
 async function requireAdmin(req: IncomingMessage): Promise<AuthUser> {
   const token = bearerToken(req);
   const user = token ? await getUserBySessionToken(token) : null;
-  if (!user) throw new HttpError(401, "로그인이 필요합니다.");
+  if (!user) {
+    if (token) void recordTokenProbe({ ip: req.socket.remoteAddress || "unknown", path: `admin:${req.url ?? ""}`.split("?")[0], userAgent: String(req.headers["user-agent"] || "") });
+    throw new HttpError(401, "로그인이 필요합니다.");
+  }
   if (user.role !== "admin") throw new HttpError(403, "관리자만 어드민에 접근할 수 있습니다.");
   return user;
 }
@@ -185,15 +197,24 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const body = await readJsonBody<{ username?: string; password?: string }>(req);
     const username = body.username || "";
     const ip = req.socket.remoteAddress || "unknown";
+    const userAgent = String(req.headers["user-agent"] || "");
     const retryAfter = loginThrottle.retryAfterSeconds(username, ip);
-    if (retryAfter > 0) throw new HttpError(429, `로그인 시도가 너무 많습니다. ${Math.ceil(retryAfter / 60)}분 뒤에 다시 시도해 주세요.`);
+    if (retryAfter > 0) {
+      void recordAuthEvent({ source: "admin", username, ip, userAgent, result: "throttled" });
+      throw new HttpError(429, `로그인 시도가 너무 많습니다. ${Math.ceil(retryAfter / 60)}분 뒤에 다시 시도해 주세요.`);
+    }
     const user = await verifyCredentials(username, body.password || "");
     if (!user) {
       loginThrottle.recordFailure(username, ip);
+      await recordAuthEvent({ source: "admin", username, ip, userAgent, result: await classifyLoginFailure(username).catch(() => "bad_password" as const) });
       throw new HttpError(401, "아이디 또는 비밀번호가 올바르지 않습니다.");
     }
     loginThrottle.recordSuccess(username, ip);
-    if (user.role !== "admin") throw new HttpError(403, "관리자 계정만 어드민에 로그인할 수 있습니다.");
+    if (user.role !== "admin") {
+      void recordAuthEvent({ source: "admin", username: user.username, ip, userAgent, result: "not_admin" });
+      throw new HttpError(403, "관리자 계정만 어드민에 로그인할 수 있습니다.");
+    }
+    void recordAuthEvent({ source: "admin", username: user.username, ip, userAgent, result: "success" });
     const token = await createSession(user.id);
     sendJson(res, 200, { token, user });
     return;
@@ -253,6 +274,26 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       sendJson(res, 200, { revoked: await revokeUserSessions(userId) });
       return;
     }
+  }
+
+  /* ---- 보안 기록 ---- */
+  if (method === "GET" && pathname === "/api/security/summary") {
+    sendJson(res, 200, await getAuthSummary());
+    return;
+  }
+  if (method === "GET" && pathname === "/api/security/events") {
+    const param = (key: string) => url.searchParams.get(key) || undefined;
+    const filter: AuthEventFilter = {
+      result: param("result") as AuthEventFilter["result"],
+      username: param("username"),
+      ip: param("ip"),
+      source: param("source") as AuthEventFilter["source"],
+      days: Number(param("days") ?? 7),
+      before: param("before") ? Number(param("before")) : undefined,
+      limit: 100,
+    };
+    sendJson(res, 200, { events: await listAuthEvents(filter) });
+    return;
   }
 
   /* ---- 설정 (모델·시스템) ---- */
@@ -433,6 +474,7 @@ async function bootstrap() {
     initSetupMode();
   } else {
     await ensureUserColumns();
+    await ensureAuthEventTables();
     await encryptStoredSecrets();
   }
   server.listen(PORT, HOST, () => {

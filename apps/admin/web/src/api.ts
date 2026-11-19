@@ -233,6 +233,35 @@ export interface UpgradeInfo {
   job: UpgradeJob | null;
 }
 
+export type AuthEventResult = "success" | "bad_password" | "unknown_user" | "disabled" | "not_admin" | "throttled";
+
+export interface AuthEvent {
+  id: number;
+  at: string;
+  source: "app" | "admin";
+  username: string;
+  ip: string;
+  userAgent: string;
+  result: AuthEventResult;
+}
+
+export interface AuthSummary {
+  failures24h: number;
+  successes24h: number;
+  blockedIps: Array<{ ip: string; lastAt: string; attempts: number }>;
+  topFailingIps: Array<{ ip: string; failures: number; usernames: string[]; lastAt: string }>;
+  tokenProbes: Array<{ ip: string; count: number; lastAt: string; lastPath: string; userAgent: string }>;
+}
+
+export interface AuthEventQuery {
+  result?: string;
+  source?: string;
+  username?: string;
+  ip?: string;
+  days?: number;
+  before?: number;
+}
+
 export const adminApi = {
   login: (username: string, password: string) =>
     request<{ token: string; user: AdminUser }>("/api/auth/login", { method: "POST", body: json({ username, password }) }),
@@ -262,6 +291,12 @@ export const adminApi = {
     request<{ models: ModelInfo[]; message?: string }>("/api/models", { method: "POST", body: json(payload) }),
 
   status: () => request<AdminStatus>("/api/status"),
+  securitySummary: () => request<AuthSummary>("/api/security/summary"),
+  securityEvents: (query: AuthEventQuery) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(key, String(value));
+    return request<{ events: AuthEvent[] }>(`/api/security/events?${params}`);
+  },
   upgradeInfo: (refresh = false) => request<UpgradeInfo>(`/api/upgrade${refresh ? "?refresh=1" : ""}`),
   startUpgrade: (version: string, backup: boolean) =>
     request<{ job: UpgradeJob }>("/api/upgrade", { method: "POST", body: json({ version, backup }) }),

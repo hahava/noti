@@ -864,3 +864,82 @@ code {
   padding-left: 10px;
   border-left: 2px solid var(--border, #e5e5e5);
 }
+
+/* 보안 */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.pad--head {
+  margin: 0;
+  padding-bottom: 4px;
+}
+
+.security-filters {
+  flex-wrap: wrap;
+}
+
+.security-filters h3 {
+  margin: 0;
+}
+
+.security-filters__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-filters__fields select {
+  width: auto;
+}
+
+.security-filters__fields input {
+  width: 130px;
+}
+
+.badge--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.text-danger {
+  color: var(--danger) !important;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.clip {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .security-grid {
+    grid-template-columns: 1fr;
+  }
+}

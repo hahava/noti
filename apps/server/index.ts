@@ -44,6 +44,7 @@ import {
 } from "./embeddings.js";
 import { hybridSearch, retrieveSources } from "./search.js";
 import { LoginThrottle, parseAllowedOrigins, resolveAllowedOrigin } from "@noty/core/http-security";
+import { classifyLoginFailure, recordAuthEvent, recordTokenProbe } from "@noty/core/auth-events";
 import { DEFAULT_UPLOADS_DIR } from "@noty/core/paths";
 import { attachCollaborationProxy, serveWebApp } from "./web-gateway.js";
 import { getCanvasSnapshot, getPagePreviews, getWorkspaceGraph } from "./graph.js";
@@ -95,6 +96,13 @@ function clientIp(req: IncomingMessage): string {
     if (first) return first;
   }
   return req.socket.remoteAddress || "unknown";
+}
+
+const userAgentOf = (req: IncomingMessage) => String(req.headers["user-agent"] || "");
+
+/** 토큰을 보냈는데 맞지 않으면 (만료·위조) 보안 기록에 IP별 횟수로 남긴다. 토큰이 아예 없으면 남기지 않는다. */
+function noteBadToken(req: IncomingMessage, token: string | null, pathname: string): void {
+  if (token) void recordTokenProbe({ ip: clientIp(req), path: pathname, userAgent: userAgentOf(req) });
 }
 
 function extractBearerToken(req: IncomingMessage): string | null {
@@ -184,8 +192,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const ip = clientIp(req);
+      const userAgent = userAgentOf(req);
       const retryAfter = loginThrottle.retryAfterSeconds(username, ip);
       if (retryAfter > 0) {
+        void recordAuthEvent({ source: "app", username, ip, userAgent, result: "throttled" });
         res.setHeader("Retry-After", String(retryAfter));
         sendJson(res, 429, { error: `로그인 시도가 너무 많습니다. ${Math.ceil(retryAfter / 60)}분 뒤에 다시 시도해 주세요.` });
         return;
@@ -193,12 +203,16 @@ const server = http.createServer(async (req, res) => {
       const auth = await authenticateUserInDb(username, password);
       if (!auth) {
         loginThrottle.recordFailure(username, ip);
+        void classifyLoginFailure(username)
+          .then((result) => recordAuthEvent({ source: "app", username, ip, userAgent, result }))
+          .catch(() => undefined);
         sendJson(res, 401, {
           error: "아이디 또는 비밀번호가 일치하지 않습니다.",
         });
         return;
       }
       loginThrottle.recordSuccess(username, ip);
+      void recordAuthEvent({ source: "app", username: auth.user.username, ip, userAgent, result: "success" });
       sendJson(res, 200, auth);
       return;
     }
@@ -218,6 +232,7 @@ const server = http.createServer(async (req, res) => {
       const token = extractBearerToken(req);
       const user = token ? await getUserBySessionToken(token) : null;
       if (!user) {
+        noteBadToken(req, token, pathname);
         sendJson(res, 401, { error: "로그인이 필요하거나 세션이 만료되었습니다." });
         return;
       }
@@ -238,6 +253,7 @@ const server = http.createServer(async (req, res) => {
         const token = extractBearerToken(req);
         const viewer = token ? await getUserBySessionToken(token) : null;
         if (!viewer) {
+          noteBadToken(req, token, pathname);
           sendJson(res, 401, { error: "파일을 보려면 로그인이 필요합니다." });
           return;
         }
@@ -269,6 +285,7 @@ const server = http.createServer(async (req, res) => {
     const bearerToken = extractBearerToken(req);
     const authUser = bearerToken ? await getUserBySessionToken(bearerToken) : null;
     if (!authUser) {
+      noteBadToken(req, bearerToken, pathname);
       sendJson(res, 401, { error: "인증이 필요합니다. 먼저 서버에 로그인해 주세요." });
       return;
     }
