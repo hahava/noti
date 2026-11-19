@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -12,7 +14,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { EmojiPicker, randomEmoji } from "./EmojiPicker";
 import {
   BlockNoteEditor,
   BlockNoteSchema,
@@ -1072,6 +1073,9 @@ interface ContextMenuState {
   x: number;
   y: number;
 }
+
+// 이모지 데이터가 커서 피커를 열 때만 받는다
+const EmojiPicker = lazy(() => import("./EmojiPicker").then((m) => ({ default: m.EmojiPicker })));
 
 interface EmojiPickerState {
   pageId: string;
@@ -3960,7 +3964,7 @@ export default function App() {
 
   const handleSetRandomEmoji = (pageId: string) => {
     if (isReadOnlyUser) return;
-    void handleUpdatePageIcon(pageId, randomEmoji());
+    void import("./EmojiPicker").then(({ randomEmoji }) => handleUpdatePageIcon(pageId, randomEmoji()));
   };
 
   const handleUpdatePageWidth = (pageId: string, rawWidth: string) => {
@@ -4627,7 +4631,9 @@ export default function App() {
             />
           </form>
 
-          <EmojiPicker onSelect={(emoji) => void handleUpdatePageIcon(emojiPicker.pageId, emoji)} />
+          <Suspense fallback={<div className="emoji-picker-mart" style={{ width: 352, height: 420 }} />}>
+            <EmojiPicker onSelect={(emoji) => void handleUpdatePageIcon(emojiPicker.pageId, emoji)} />
+          </Suspense>
         </div>
       )}
 

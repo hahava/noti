@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+
 import { createPortal } from "react-dom";
 import { createReactBlockSpec, useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -12,6 +13,7 @@ import {
   editCollectionRowText,
   initializeCollectionMap,
   patchCollectionMap,
+  readChartFields,
   readCollectionMap,
 } from "@noty/shared/collection-yjs";
 import { CollectionRichText } from "./CollectionRichText";
@@ -100,6 +102,9 @@ const PROPERTY_TYPE_META: Array<{ type: CollectionPropertyType; label: string; i
   { type: "formula", label: "수식", icon: "ƒ" },
 ];
 
+// 차트(ECharts)는 무거워서 차트 뷰를 열 때만 받는다
+const CollectionChart = lazy(() => import("./CollectionChart").then((m) => ({ default: m.CollectionChart })));
+
 const VIEW_MODE_META: Array<{ mode: CollectionViewMode; label: string; icon: string }> = [
   { mode: "table", label: "표", icon: "☰" },
   { mode: "board", label: "보드", icon: "◫" },
@@ -107,6 +112,7 @@ const VIEW_MODE_META: Array<{ mode: CollectionViewMode; label: string; icon: str
   { mode: "list", label: "리스트", icon: "≡" },
   { mode: "gallery", label: "갤러리", icon: "▧" },
   { mode: "timeline", label: "타임라인", icon: "▤" },
+  { mode: "chart", label: "차트", icon: "📊" },
 ];
 
 const CALCULATION_LABELS: Record<CollectionCalculationType, string> = {
@@ -169,7 +175,7 @@ function parseCollectionData(raw: string): CollectionData {
           .map((view, index): CollectionView => ({
             id: view.id || `view-${index + 1}`,
             name: typeof view.name === "string" && view.name.trim() ? view.name : `뷰 ${index + 1}`,
-            mode: ["board", "calendar", "gallery", "list", "timeline"].includes(view.mode) ? view.mode : "table",
+            mode: ["board", "calendar", "gallery", "list", "timeline", "chart"].includes(view.mode) ? view.mode : "table",
             statusFilter: STATUS_KEYS.includes(view.statusFilter as CollectionStatus) ? view.statusFilter : "all",
             tagFilter: typeof view.tagFilter === "string" ? view.tagFilter : "all",
             propertyFilterId: typeof view.propertyFilterId === "string" ? view.propertyFilterId : "",
@@ -182,6 +188,7 @@ function parseCollectionData(raw: string): CollectionData {
             ...(Array.isArray(view.collapsedGroups) ? { collapsedGroups: view.collapsedGroups } : {}),
             datePropertyId: typeof view.datePropertyId === "string" ? view.datePropertyId : "",
             ...(typeof view.endDatePropertyId === "string" && view.endDatePropertyId ? { endDatePropertyId: view.endDatePropertyId } : {}),
+            ...readChartFields((key) => (view as unknown as Record<string, unknown>)[key]),
             hiddenPropertyIds: Array.isArray(view.hiddenPropertyIds)
               ? view.hiddenPropertyIds.filter((id): id is string => typeof id === "string")
               : [],
@@ -1280,6 +1287,11 @@ function CollectionBlockComponent({
 
   const cellValue = (row: CollectionRow, property: CollectionProperty) =>
     computePropertyValue(data, row, property, relatedCollections);
+  // 차트는 이 함수가 바뀔 때마다 다시 집계·애니메이션하므로 데이터가 바뀔 때만 새로 만든다
+  const chartValueOf = useCallback(
+    (row: CollectionRow, property: CollectionProperty) => computePropertyValue(data, row, property, relatedCollections),
+    [data, relatedCollections],
+  );
   const relationTarget = (property: CollectionProperty) =>
     property.relationCollectionId === collectionId ? data : relatedCollections[property.relationCollectionId ?? ""];
   const rollupTarget = (property: CollectionProperty) => {
@@ -1404,6 +1416,16 @@ function CollectionBlockComponent({
         mode === "calendar" || mode === "timeline" ? data.properties.find((property) => property.type === "date")?.id ?? "" : "",
       // 타임라인은 두 번째 날짜 속성이 있으면 끝 날짜로 쓴다
       ...(mode === "timeline" ? { endDatePropertyId: data.properties.filter((property) => property.type === "date")[1]?.id } : {}),
+      // 차트는 상태·선택·체크박스처럼 묶기 좋은 속성으로 시작한다
+      ...(mode === "chart"
+        ? {
+            chartType: "bar" as const,
+            chartGroupBy: (
+              data.properties.find((property) => property.type === "status" || property.type === "select") ??
+              data.properties.find((property) => property.type === "checkbox" || property.type === "date")
+            )?.id,
+          }
+        : {}),
     };
     updateData((prev) => ({
       ...prev,
@@ -3541,6 +3563,16 @@ function CollectionBlockComponent({
             })
           )}
         </div>
+      ) : activeView.mode === "chart" ? (
+        <Suspense fallback={<div className="ndb-empty-state"><p>차트를 불러오는 중…</p></div>}>
+        <CollectionChart
+          rows={filteredAndSortedRows}
+          properties={data.properties}
+          view={activeView}
+          valueOf={chartValueOf}
+          onChangeView={(patch) => updateActiveView(patch)}
+        />
+        </Suspense>
       ) : activeView.mode === "timeline" && dateProperty ? (
         <CollectionTimeline
           rows={filteredAndSortedRows}

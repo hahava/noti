@@ -7,6 +7,7 @@ import {
   editCollectionRowText,
   initializeCollectionMap,
   patchCollectionMap,
+  readChartFields,
   readCollectionMap,
 } from "./collection-yjs";
 import type { CollectionData } from "./collection-types";
@@ -325,4 +326,19 @@ test("row color syncs and clears in Yjs", () => {
   patchCollectionMap(rightMap, synced, { ...synced, rows: synced.rows.map((r) => ({ ...r, color: undefined })) });
   merge(left, right);
   assert.equal(readCollectionMap(leftMap)!.rows[0].color, undefined);
+});
+
+test("chart view settings sync in Yjs and unknown values are dropped", () => {
+  const { left, right, leftMap, rightMap } = pair();
+  const base = readCollectionMap(leftMap)!;
+  const chart = { ...base.views[0], id: "ch", name: "차트", mode: "chart" as const, chartType: "line" as const, chartGroupBy: "due", chartDateBucket: "month" as const, chartAggregate: "percent_checked" as const, chartValuePropertyId: "done" };
+  patchCollectionMap(leftMap, base, { ...base, views: [...base.views, chart] });
+  merge(left, right);
+  const synced = readCollectionMap(rightMap)!.views[1];
+  assert.equal(synced.mode, "chart");
+  assert.deepEqual(
+    [synced.chartType, synced.chartGroupBy, synced.chartDateBucket, synced.chartAggregate, synced.chartValuePropertyId, synced.chartSeriesBy],
+    ["line", "due", "month", "percent_checked", "done", undefined],
+  );
+  assert.deepEqual(readChartFields((key) => ({ chartType: "pie", chartAggregate: "sum", chartGroupBy: 3 })[key]), { chartAggregate: "sum" });
 });

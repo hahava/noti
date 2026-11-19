@@ -130,6 +130,26 @@ function patchRecord<T extends { id: string }>(
   }
 }
 
+const CHART_ENUMS = {
+  chartType: ["bar", "line", "donut", "number"],
+  chartDateBucket: ["day", "week", "month"],
+  chartAggregate: ["count", "sum", "average", "percent_checked"],
+} as const;
+
+/** 차트 뷰 설정 읽기 (JSON·Yjs 공용): 알 수 없는 값은 버린다 */
+export function readChartFields(get: (key: string) => unknown): Partial<CollectionView> {
+  const result: Record<string, string> = {};
+  for (const key of ["chartGroupBy", "chartSeriesBy", "chartValuePropertyId"] as const) {
+    const value = get(key);
+    if (typeof value === "string" && value) result[key] = value;
+  }
+  for (const [key, allowed] of Object.entries(CHART_ENUMS)) {
+    const value = get(key);
+    if ((allowed as readonly unknown[]).includes(value)) result[key] = value as string;
+  }
+  return result as Partial<CollectionView>;
+}
+
 function patchView(record: RecordMap, before: CollectionView | undefined, after: CollectionView): void {
   for (const key of [
     "name",
@@ -144,6 +164,12 @@ function patchView(record: RecordMap, before: CollectionView | undefined, after:
     "groupBy",
     "datePropertyId",
     "endDatePropertyId",
+    "chartType",
+    "chartGroupBy",
+    "chartDateBucket",
+    "chartSeriesBy",
+    "chartAggregate",
+    "chartValuePropertyId",
     "filterMode",
     "peekMode",
     "showTitle",
@@ -448,7 +474,7 @@ export function readCollectionMap(map: RecordMap): CollectionData | null {
         return {
           id,
           name: stringValue(value.get("name")),
-          mode: ["board", "calendar", "gallery", "list", "timeline"].includes(String(value.get("mode")))
+          mode: ["board", "calendar", "gallery", "list", "timeline", "chart"].includes(String(value.get("mode")))
             ? value.get("mode") as CollectionView["mode"]
             : "table",
           statusFilter: stringValue(value.get("statusFilter")) as CollectionView["statusFilter"],
@@ -463,6 +489,7 @@ export function readCollectionMap(map: RecordMap): CollectionData | null {
           ...(collapsedGroups && collapsedGroups.length > 0 ? { collapsedGroups } : {}),
           datePropertyId: stringValue(value.get("datePropertyId")),
           ...(value.get("endDatePropertyId") ? { endDatePropertyId: stringValue(value.get("endDatePropertyId")) } : {}),
+          ...readChartFields((key) => value.get(key)),
           hiddenPropertyIds: (value.get("hiddenPropertyIds") as Y.Array<string> | undefined)?.toArray() ?? [],
           filters: readFilters(value.get("filtersJson")),
           filterMode: value.get("filterMode") === "or" ? "or" : "and",

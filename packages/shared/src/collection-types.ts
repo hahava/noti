@@ -1,5 +1,5 @@
 export type CollectionStatus = "todo" | "in_progress" | "review" | "done";
-export type CollectionViewMode = "table" | "board" | "calendar" | "gallery" | "list" | "timeline";
+export type CollectionViewMode = "table" | "board" | "calendar" | "gallery" | "list" | "timeline" | "chart";
 export type CollectionSortBy = "manual" | "title" | "date" | "status" | string;
 export type CollectionSortDirection = "asc" | "desc";
 export type CollectionOptionColor = "gray" | "blue" | "green" | "amber" | "purple" | "rose";
@@ -57,6 +57,13 @@ export interface CollectionView {
   datePropertyId?: string;
   /** 타임라인 뷰의 끝 날짜 속성 (시작은 datePropertyId) */
   endDatePropertyId?: string;
+  /** 차트 뷰: 모양, 가로축(묶을 속성), 날짜 묶음 단위, 색으로 나눌 속성, 값 계산 */
+  chartType?: "bar" | "line" | "donut" | "number";
+  chartGroupBy?: string;
+  chartDateBucket?: "day" | "week" | "month";
+  chartSeriesBy?: string;
+  chartAggregate?: "count" | "sum" | "average" | "percent_checked";
+  chartValuePropertyId?: string;
   hiddenPropertyIds?: string[];
   filters?: CollectionFilterRule[];
   filterMode?: "and" | "or";
