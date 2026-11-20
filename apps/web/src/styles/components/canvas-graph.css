@@ -366,7 +366,7 @@
 .canvas-card__text {
   height: 100%;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   overflow: auto;
   line-height: 1.5;
 }

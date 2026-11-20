@@ -7,6 +7,10 @@
   background: var(--ds-bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* 한국어는 기본값이면 글자 사이 아무 데서나 줄이 바뀐다 ("안녕하 / 세요").
+     띄어쓰기에서만 바꾸고, 공백 없는 긴 문자열(URL 등)만 칸 끝에서 끊는다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 * {

@@ -143,7 +143,7 @@
   background: rgba(201, 60, 55, 0.08);
   color: var(--ds-text-danger);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .ai-panel__link-btn {
@@ -234,7 +234,7 @@
   font-size: var(--ds-text-sm);
   line-height: 1.6;
   color: var(--ds-text-primary);
-  word-break: break-word;
+  overflow-wrap: anywhere;
   user-select: text;
 }
 
