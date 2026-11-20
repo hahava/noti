@@ -100,4 +100,14 @@ test("aiMarkdownToBlocks: AI-written remote images and new bookmarks never auto-
   const inserted = aiMarkdownToBlocks(answer, parseWithImages);
   assert.ok(!inserted.some((b) => b.type === "image" || b.type === "bookmark"), "insert: nothing loads automatically");
   assert.equal(aiMarkdownToBlocks("https://youtu.be/abcdefghijk", parseWithImages)[0].type, "embed", "allow-listed embeds stay");
+  // <video>/<audio>/<embed> 는 동영상·오디오·파일 블록이 된다: 주소를 가진 새 블록은 종류와 상관없이 글자로
+  const media = aiMarkdownToBlocks("x", () => [
+    { type: "video", props: { url: "https://evil.example/v.mp4" } },
+    { type: "audio", props: { url: "https://evil.example/a.mp3", name: "a.mp3" } },
+    { type: "file", props: { url: "https://evil.example/e" } },
+    { type: "paragraph", content: text("ok"), children: [{ type: "image", props: { url: "https://evil.example/nested.png" } }] },
+  ]);
+  assert.deepEqual(media.map((b) => b.type), ["paragraph", "paragraph", "paragraph", "paragraph"]);
+  assert.match(media[1].content[0].text, /^🔊 a\.mp3 \(https:\/\/evil\.example/);
+  assert.equal(media[3].children?.[0].type, "paragraph", "nested blocks are checked too");
 });
