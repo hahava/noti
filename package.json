@@ -1,6 +1,6 @@
 {
   "name": "noty",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "private": true,
   "description": "Noty: self-hosted document workspace (web, desktop, API, admin) — npm workspaces root",
   "license": "GPL-3.0-only",
