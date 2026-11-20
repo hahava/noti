@@ -265,7 +265,12 @@
 .ai-panel__md ol,
 .ai-panel__md blockquote,
 .ai-panel__md pre,
-.ai-panel__md .ai-panel__table {
+.ai-panel__md .ai-panel__img-placeholder {
+  color: var(--ds-text-secondary);
+  font-size: 0.92em;
+}
+
+.ai-panel__table {
   margin: 0 0 8px;
 }
 

