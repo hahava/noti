@@ -2226,7 +2226,7 @@ function PageTreeNode({
           </button>
         )}
 
-        {hasChildren && (
+        {hasChildren ? (
           <button
             type="button"
             className="ds-btn ds-btn--ghost ds-btn--icon tree-chevron-btn"
@@ -2235,6 +2235,9 @@ function PageTreeNode({
           >
             <ChevronSvgIcon expanded={isExpanded} />
           </button>
+        ) : (
+          // 하위 페이지가 없어도 화살표 자리를 비워 둬서 같은 단계의 아이콘·제목이 한 줄로 맞는다
+          <span className="tree-chevron-btn tree-chevron-spacer" aria-hidden="true" />
         )}
 
         <button

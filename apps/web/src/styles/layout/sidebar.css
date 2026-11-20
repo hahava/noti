@@ -375,6 +375,10 @@
   color: var(--ds-text-subtle);
 }
 
+.tree-chevron-spacer {
+  flex-shrink: 0;
+}
+
 .tree-slot-btn,
 .tree-slot-static {
   width: 20px;
