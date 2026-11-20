@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown, shrinkWarning } from "./ai-markdown";
+import { aiMarkdownToBlocks, blocksToAIMarkdown, cleanAIMarkdown, linkCitations, shrinkWarning } from "./ai-markdown";
 
 const text = (t: string) => [{ type: "text", text: t, styles: {} }];
 /** 테스트용: 블록 종류와 글만 적는다 */
@@ -63,4 +63,13 @@ test("shrinkWarning: flags dropped content unless the request asks to shorten", 
   assert.equal(shrinkWarning(original, "<result>\nFirst paragraph.\n\nSecond paragraph.\n\nThird.\n\nFourth.\n</result>", "영어로 번역해 줘"), null);
   assert.ok(shrinkWarning(original, "<result>\nFourth paragraph.\n</result>", "영어로 번역해 줘"));
   assert.equal(shrinkWarning(original, "네 문단 요약", "짧게 요약해 줘"), null);
+});
+
+test("linkCitations: only real sources outside code become cite links", () => {
+  const sources = new Set([1, 2]);
+  assert.equal(linkCitations("A [1] and [2][3].", sources), "A [1](#cite-1) and [2](#cite-2)[3].");
+  assert.equal(linkCitations("see `arr[1]` and\n```\nx[2]\n```\n[1]", sources), "see `arr[1]` and\n```\nx[2]\n```\n[1](#cite-1)");
+  assert.equal(linkCitations("[1](https://a.b) [1]: ref", sources), "[1](https://a.b) [1]: ref");
+  assert.equal(linkCitations("streaming ```\ncode [1]", sources), "streaming ```\ncode [1]", "unclosed fence while streaming");
+  assert.equal(linkCitations("[1]", new Set()), "[1]");
 });

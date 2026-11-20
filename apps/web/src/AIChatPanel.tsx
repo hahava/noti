@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useComponentsContext } from "@blocknote/react";
 import { workspaceApi } from "./api";
 import { WikiConceptView } from "./WikiConceptView";
 import { WikiHome } from "./WikiHome";
 import type { AIChatMessage, AIChatSource, AIProvider, AIStatus, PageDigest, WikiOverview } from "./vite-env";
-import { cleanAIMarkdown, shrinkWarning, type AIEditorBridge, type AIEditSelection } from "./ai-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { cleanAIMarkdown, linkCitations, shrinkWarning, type AIEditorBridge, type AIEditSelection } from "./ai-markdown";
 
 /** 화면용 메시지: 편집 모드로 받은 답은 바꿀 범위를 함께 들고 있다 */
 type PanelMessage = AIChatMessage & { edit?: AIEditSelection; applied?: string };
@@ -146,40 +148,7 @@ export function blocksToPlainText(blocks: readonly unknown[] | undefined, depth 
 }
 
 /** 본문의 [1], [2] 출처 번호를 누를 수 있는 링크로 바꾼다. */
-function TextWithCitations({
-  text,
-  sources,
-  onOpenSource,
-}: {
-  text: string;
-  sources?: AIChatSource[];
-  onOpenSource?: (source: AIChatSource) => void;
-}) {
-  if (!sources?.length || !onOpenSource) return <>{text}</>;
-  const byNumber = new Map(sources.map((source) => [source.n, source]));
-  return (
-    <>
-      {text.split(/(\[\d+\])/g).map((part, index) => {
-        const match = part.match(/^\[(\d+)\]$/);
-        const source = match ? byNumber.get(Number(match[1])) : undefined;
-        if (!source) return <Fragment key={index}>{part}</Fragment>;
-        return (
-          <button
-            key={index}
-            type="button"
-            className="ai-panel__cite"
-            title={source.context}
-            onClick={() => onOpenSource(source)}
-          >
-            {source.n}
-          </button>
-        );
-      })}
-    </>
-  );
-}
-
-/** 응답 텍스트의 ``` 코드 블록만 구분해서 보여주는 가벼운 렌더러 */
+/** AI 답변 마크다운 (표·체크리스트·취소선 포함). HTML은 그리지 않아 답변에 스크립트가 섞여도 안전하다. */
 function MessageContent({
   content,
   sources,
@@ -189,26 +158,43 @@ function MessageContent({
   sources?: AIChatSource[];
   onOpenSource?: (source: AIChatSource) => void;
 }) {
-  const parts = content.split(/```/);
+  const byNumber = useMemo(() => new Map((sources ?? []).map((source) => [source.n, source])), [sources]);
+  const markdown = useMemo(
+    () => (onOpenSource ? linkCitations(content, new Set(byNumber.keys())) : content),
+    [content, byNumber, onOpenSource],
+  );
   return (
-    <>
-      {parts.map((part, index) => {
-        if (index % 2 === 1) {
-          const newline = part.indexOf("\n");
-          const code = newline >= 0 ? part.slice(newline + 1) : part;
-          return (
-            <pre key={index} className="ai-panel__code">
-              <code>{code.replace(/\n$/, "")}</code>
-            </pre>
-          );
-        }
-        return part ? (
-          <span key={index} className="ai-panel__text">
-            <TextWithCitations text={part} sources={sources} onOpenSource={onOpenSource} />
-          </span>
-        ) : null;
-      })}
-    </>
+    <div className="ai-panel__md">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ href, children }) => {
+            const cite = href?.match(/^#cite-(\d+)$/);
+            const source = cite ? byNumber.get(Number(cite[1])) : undefined;
+            if (source && onOpenSource) {
+              return (
+                <button type="button" className="ai-panel__cite" title={source.context} onClick={() => onOpenSource(source)}>
+                  {source.n}
+                </button>
+              );
+            }
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer">
+                {children}
+              </a>
+            );
+          },
+          // 넓은 표는 답변 칸 안에서 가로로 스크롤한다
+          table: ({ children }) => (
+            <div className="ai-panel__table">
+              <table>{children}</table>
+            </div>
+          ),
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -793,11 +779,16 @@ export function AIChatPanel({
             return (
             <div key={index} className={`ai-panel__message ai-panel__message--${message.role}`}>
               <div className={`ai-panel__bubble ${isStreaming ? "ai-panel__bubble--streaming" : ""}`}>
-                <MessageContent
-                  content={message.edit ? cleanAIMarkdown(message.content) : message.content}
-                  sources={message.sources}
-                  onOpenSource={(source) => onOpenSource(source.pageId, source.blockId)}
-                />
+                {message.role === "user" ? (
+                  // 내가 쓴 질문은 쓴 그대로 (줄바꿈 유지, 마크다운으로 해석하지 않음)
+                  <span className="ai-panel__plain">{message.content}</span>
+                ) : (
+                  <MessageContent
+                    content={message.edit ? cleanAIMarkdown(message.content) : message.content}
+                    sources={message.sources}
+                    onOpenSource={(source) => onOpenSource(source.pageId, source.blockId)}
+                  />
+                )}
               </div>
               {message.role === "assistant" && message.sources && message.sources.length > 0 && (
                 <SourceList

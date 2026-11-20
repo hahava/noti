@@ -241,3 +241,17 @@ export function createAIEditorBridge(editor: any, pageId: string): AIEditorBridg
     },
   };
 }
+
+/**
+ * AI 답변의 출처 표시 [1] 을 마크다운 링크 [1](#cite-1) 로 바꾼다 (렌더러가 출처 버튼으로 그린다).
+ * 코드 블록·인라인 코드 안과 이미 링크인 [1](...) 은 건드리지 않고, 실제 있는 출처 번호만 바꾼다.
+ */
+export function linkCitations(markdown: string, sourceNumbers: ReadonlySet<number>): string {
+  if (sourceNumbers.size === 0) return markdown;
+  return markdown
+    .split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/)
+    .map((part, index) =>
+      index % 2 === 1 ? part : part.replace(/\[(\d+)\](?![(:])/g, (all, n: string) => (sourceNumbers.has(Number(n)) ? `[${n}](#cite-${n})` : all)),
+    )
+    .join("");
+}
