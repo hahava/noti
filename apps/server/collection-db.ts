@@ -69,10 +69,16 @@ export async function ensureCollectionInDb(id: string, ownerPageId: string, init
 }
 
 export async function listCollectionsFromDb(_userId?: string): Promise<Array<{ id: string; title: string; ownerPageTitle: string }>> {
+  // 블록을 지워도 컬렉션 기록은 남는다(실행 취소로 되살릴 수 있게). 연결 목록에는 지금 어느 페이지엔가 놓인 것만 보인다.
+  // shortcut: 페이지 본문(JSON) 전체에서 id 를 찾는다, 페이지·컬렉션이 수천 개가 되면 블록↔컬렉션 참조 표를 따로 둔다.
   const result = await pool.query(
     `SELECT c.id, c.title, p.title AS owner_page_title
      FROM collections c JOIN pages p ON p.id = c.owner_page_id
-     WHERE p.deleted_at IS NULL ORDER BY c.created_at DESC`,
+     WHERE p.deleted_at IS NULL
+       -- dataJson 에 collectionId 를 아직 저장하지 않은 블록은 블록 id 로 가리킨다 (collection-<블록 id>)
+       AND EXISTS (SELECT 1 FROM pages q WHERE q.deleted_at IS NULL
+                   AND (strpos(q.blocks::text, c.id) > 0 OR strpos(q.blocks::text, substr(c.id, 12)) > 0))
+     ORDER BY c.created_at DESC`,
   );
   return result.rows.map((row) => ({ id: String(row.id), title: String(row.title), ownerPageTitle: String(row.owner_page_title) }));
 }
