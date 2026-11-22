@@ -369,6 +369,42 @@
   overflow-wrap: anywhere;
   overflow: auto;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-card__text-inner {
+  width: 100%;
+}
+
+/* 메모 글 정렬. 세로는 auto 여백으로 맞춰서, 글이 카드보다 길면 위에서부터 스크롤된다 (justify-content 는 위가 잘림) */
+.canvas-card--valign-middle .canvas-card__text-inner {
+  margin-block: auto;
+}
+
+.canvas-card--valign-bottom .canvas-card__text-inner {
+  margin-top: auto;
+}
+
+.canvas-card--align-center .canvas-card__text,
+.canvas-card--align-center .canvas-card__textarea {
+  text-align: center;
+}
+
+.canvas-card--align-right .canvas-card__text,
+.canvas-card--align-right .canvas-card__textarea {
+  text-align: right;
+}
+
+/* 목록·체크 줄은 flex 라 text-align 대신 줄 자체를 민다 */
+.canvas-card--align-center .canvas-md__item,
+.canvas-card--align-center .canvas-md__check {
+  justify-content: center;
+}
+
+.canvas-card--align-right .canvas-md__item,
+.canvas-card--align-right .canvas-md__check {
+  justify-content: flex-end;
 }
 
 .canvas-card__placeholder {
@@ -565,40 +601,6 @@
 .canvas-card__body .page-history__line--h2 { font-size: 0.95rem; }
 .canvas-card__body .page-history__line--h3 { font-size: 0.875rem; }
 
-/* 카드 안 편집: 카드 크기에 맞춰 편집기를 채운다 */
-.canvas-card--editing {
-  padding-bottom: 0;
-  cursor: auto;
-}
-
-.react-flow__node.selected .canvas-card--editing {
-  border-color: var(--ds-color-accent);
-}
-
-.canvas-card__editor {
-  flex: 1;
-  min-height: 0;
-  margin: 6px -12px 0;
-  overflow: auto;
-  cursor: text;
-}
-
-.canvas-card__editor .page {
-  min-height: 0;
-  padding: 0;
-}
-
-.canvas-card__editor .page__content {
-  width: 100%;
-  max-width: none;
-  padding: 0 0 24px;
-}
-
-.canvas-card__editor .bn-editor {
-  padding-inline: 12px;
-  font-size: var(--ds-text-sm);
-}
-
 /* 마크다운 메모 */
 .canvas-md {
   white-space: normal;
@@ -784,6 +786,11 @@
   background: none;
   color: var(--ds-text-muted);
   cursor: pointer;
+}
+
+.canvas-segmented__btn svg {
+  display: block;
+  margin: auto;
 }
 
 .canvas-segmented__btn + .canvas-segmented__btn {

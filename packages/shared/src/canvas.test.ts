@@ -97,3 +97,15 @@ test("cardsInsideGroups: only cards fully inside the dragged groups", () => {
   assert.deepEqual([...cardsInsideGroups(nodes, new Set(["g"]))].sort(), ["inner", "subgroup"]);
   assert.equal(cardsInsideGroups(nodes, new Set()).size, 0);
 });
+
+test("text alignment is stored only when it is not the default", () => {
+  const doc = new Y.Doc();
+  upsertCanvasNode(doc, "t", { type: "text", text: "가운데", x: 0, y: 0, width: 100, height: 100, textAlign: "center", verticalAlign: "middle" });
+  upsertCanvasNode(doc, "u", { type: "text", text: "기본", x: 0, y: 0, width: 100, height: 100, textAlign: "sideways" as never });
+  const [t, u] = ["t", "u"].map((id) => readCanvas(doc).nodes.find((n) => n.id === id)!);
+  assert.equal(t.textAlign, "center");
+  assert.equal(t.verticalAlign, "middle");
+  assert.ok(!("textAlign" in u) && !("verticalAlign" in u), "unknown or missing values fall back to left/top");
+  upsertCanvasNode(doc, "t", { textAlign: undefined, verticalAlign: undefined });
+  assert.ok(!("textAlign" in readCanvas(doc).nodes.find((n) => n.id === "t")!), "clearing returns to the default");
+});

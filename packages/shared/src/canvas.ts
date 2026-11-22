@@ -34,7 +34,13 @@ export interface CanvasNode {
   /** group 제목 */
   label?: string;
   color?: string;
+  /** text 카드 글 정렬 (없으면 왼쪽·위) */
+  textAlign?: CanvasTextAlign;
+  verticalAlign?: CanvasVerticalAlign;
 }
+
+export type CanvasTextAlign = "left" | "center" | "right";
+export type CanvasVerticalAlign = "top" | "middle" | "bottom";
 
 export interface CanvasEdge {
   id: string;
@@ -68,6 +74,8 @@ export const CANVAS_SETTINGS_KEY = "canvas-settings";
 
 const NODE_TYPES = new Set<CanvasNodeType>(["page", "text", "image", "link", "group"]);
 const SIDES = new Set<CanvasSide>(["top", "right", "bottom", "left"]);
+const TEXT_ALIGNS = new Set<CanvasTextAlign>(["center", "right"]);
+const VERTICAL_ALIGNS = new Set<CanvasVerticalAlign>(["middle", "bottom"]);
 
 export function canvasMaps(doc: Y.Doc) {
   return {
@@ -100,6 +108,9 @@ function readNode(id: string, map: Y.Map<unknown>): CanvasNode | null {
     url: str(map.get("url")),
     label: str(map.get("label")),
     color: str(map.get("color")),
+    // 기본값(왼쪽·위)은 저장하지 않으므로 값이 있을 때만 붙인다
+    ...(TEXT_ALIGNS.has(map.get("textAlign") as CanvasTextAlign) ? { textAlign: map.get("textAlign") as CanvasTextAlign } : {}),
+    ...(VERTICAL_ALIGNS.has(map.get("verticalAlign") as CanvasVerticalAlign) ? { verticalAlign: map.get("verticalAlign") as CanvasVerticalAlign } : {}),
   };
 }
 
