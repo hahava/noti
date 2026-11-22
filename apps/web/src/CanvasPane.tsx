@@ -661,6 +661,10 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
             }
           }
           upsertCanvasNode(doc, change.id, { x, y });
+        } else if (change.type === "dimensions" && change.resizing && change.dimensions && !readOnly) {
+          // 크기 조절 중에도 문서에 바로 반영해야 카드가 손을 따라 커진다 (안 그러면 놓는 순간 한 번에 바뀜).
+          // 처음 그릴 때 재는 크기(resizing 없음)는 건드리지 않는다.
+          upsertCanvasNode(doc, change.id, { width: Math.round(change.dimensions.width), height: Math.round(change.dimensions.height) });
         } else if (change.type === "select") {
           selectionChanged = true;
           if (change.selected) nextSelected.add(change.id);
