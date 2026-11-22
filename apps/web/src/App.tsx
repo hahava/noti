@@ -2451,6 +2451,11 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(240);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
 
+  /** 좁은 화면(휴대폰)에서는 사이드바가 본문을 덮는 서랍이라, 페이지를 고르면 닫는다 */
+  const closeSidebarIfNarrow = () => {
+    if (typeof window !== "undefined" && window.innerWidth <= 820) setIsSidebarOpen(false);
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     let wasNarrow = window.innerWidth <= 820;
@@ -3323,6 +3328,7 @@ export default function App() {
 
   // 개인 홈 대시보드로 이동 (기존 홈 탭이 있으면 전환, 없으면 현재 탭을 홈으로)
   const handleOpenHome = () => {
+    closeSidebarIfNarrow();
     if (activeTab?.pageId && activeTab.pageId !== HOME_PAGE_ID) {
       void flushPendingSaveForPage(activeTab.pageId);
     }
@@ -3360,6 +3366,7 @@ export default function App() {
     if (nextId !== HOME_PAGE_ID) {
       const target = pagesById.get(nextId);
       if (!target) return;
+      closeSidebarIfNarrow();
       expandPagePath(nextId);
       lastSelectedPageIdRef.current = nextId;
       setLastActivePageId(nextId);
@@ -4435,6 +4442,8 @@ export default function App() {
           />
         )}
       </aside>
+      {/* 좁은 화면: 사이드바 뒤를 어둡게 가리고, 누르면 닫는다 (넓은 화면에서는 CSS로 숨김) */}
+      {isSidebarOpen && <div className="sidebar-backdrop" aria-hidden="true" onClick={() => setIsSidebarOpen(false)} />}
 
       {/* 노션 `⋯` 더보기 / 우클릭 팝오버 메뉴 */}
       {contextMenu && (

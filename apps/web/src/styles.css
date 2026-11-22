@@ -27,7 +27,6 @@
 
 @import "./styles/pages/login.css";
 @import "./styles/pages/home.css";
-@import "./styles/layout/responsive.css";
 
 @import "./styles/editor/editor.css";
 @import "./styles/editor/collection.css";
@@ -35,3 +34,5 @@
 @import "./styles/editor/history.css";
 @import "./styles/editor/templates.css";
 @import "./styles/editor/link-blocks.css";
+/* 좁은 화면·터치 대응은 다른 모든 규칙을 덮어써야 하므로 맨 마지막 */
+@import "./styles/layout/responsive.css";

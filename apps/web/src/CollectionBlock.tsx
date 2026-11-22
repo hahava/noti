@@ -102,6 +102,19 @@ const PROPERTY_TYPE_META: Array<{ type: CollectionPropertyType; label: string; i
   { type: "formula", label: "수식", icon: "ƒ" },
 ];
 
+/** 휴대폰 폭이면 true (표 제목 열을 좁혀 다른 열이 보이게) */
+function useIsPhoneWidth(): boolean {
+  const query = "(max-width: 600px)";
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return matches;
+}
+
 // 차트(ECharts)는 무거워서 차트 뷰를 열 때만 받는다
 const CollectionChart = lazy(() => import("./CollectionChart").then((m) => ({ default: m.CollectionChart })));
 
@@ -1287,6 +1300,7 @@ function CollectionBlockComponent({
 
   const cellValue = (row: CollectionRow, property: CollectionProperty) =>
     computePropertyValue(data, row, property, relatedCollections);
+  const isPhoneWidth = useIsPhoneWidth();
   // 차트는 이 함수가 바뀔 때마다 다시 집계·애니메이션하므로 데이터가 바뀔 때만 새로 만든다
   const chartValueOf = useCallback(
     (row: CollectionRow, property: CollectionProperty) => computePropertyValue(data, row, property, relatedCollections),
@@ -1835,6 +1849,8 @@ function CollectionBlockComponent({
   const dateProperty = data.properties.find(
     (property) => property.id === activeView.datePropertyId && property.type === "date",
   );
+  // 휴대폰에서는 제목 열을 좁혀(최대 180px) 다른 속성도 보이게 한다. 저장된 너비는 그대로.
+  const titleColumnWidth = isPhoneWidth ? Math.min(activeView.titleWidth ?? 260, 180) : activeView.titleWidth ?? 260;
   const endDateProperty = data.properties.find(
     (property) => property.id === activeView.endDatePropertyId && property.type === "date" && property.id !== dateProperty?.id,
   );
@@ -2025,7 +2041,7 @@ function CollectionBlockComponent({
       </td>
       <td
         className="ndb-td ndb-td--title"
-        style={{ width: `${activeView.titleWidth ?? 260}px` }}
+        style={{ width: `${titleColumnWidth}px` }}
       >
         <div className="ndb-title-cell">
           {row.icon && (
@@ -2833,7 +2849,7 @@ function CollectionBlockComponent({
             style={{
               minWidth: `${
                 28 +
-                (activeView.titleWidth ?? 260) +
+                titleColumnWidth +
                 visibleProperties.reduce((sum, prop) => sum + (prop.width ?? 170), 0) +
                 44
               }px`,
@@ -2841,7 +2857,7 @@ function CollectionBlockComponent({
           >
             <colgroup>
               <col style={{ width: "28px" }} />
-              <col style={{ width: `${activeView.titleWidth ?? 260}px` }} />
+              <col style={{ width: `${titleColumnWidth}px` }} />
               {visibleProperties.map((property) => (
                 <col key={property.id} style={{ width: `${property.width ?? 170}px` }} />
               ))}
@@ -3788,7 +3804,7 @@ function CollectionBlockComponent({
                 </span>
                 <div
                   className="ndb-list__title-wrap"
-                  style={{ width: `${activeView.titleWidth ?? 260}px` }}
+                  style={{ width: `${titleColumnWidth}px` }}
                 >
                   <input
                     ref={(el) => {
