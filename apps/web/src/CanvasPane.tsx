@@ -13,6 +13,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
+  ViewportPortal,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -44,6 +46,7 @@ import {
 } from "@noty/shared/canvas";
 import { resolveCollaborationWsUrl } from "./collaboration-url";
 import { resolveUploadUrl, workspaceApi, type PagePreview } from "./api";
+import { alignmentGuides, type GuideLine } from "./canvas-guides";
 import type { AuthSession, PageItem } from "./vite-env";
 import { PreviewBlocks } from "./PageHistory";
 import { CanvasMarkdown, toggleCheckLine } from "./canvas-markdown";
@@ -271,7 +274,7 @@ function PageCardNode({ data, selected }: NodeProps<Node<CardData>>) {
   const body = blocks && blocks.length > 1 ? blocks.slice(1) : null;
   return (
     <div
-      className={`canvas-card canvas-card--page ${missing ? "canvas-card--missing" : ""}`}
+      className={`canvas-card canvas-card--page ${missing ? "canvas-card--missing" : ""} canvas-card--align-${card.textAlign ?? "left"} canvas-card--valign-${card.verticalAlign ?? "top"}`}
       onDoubleClick={() => {
         if (!missing && card.pageId) onOpenPage(card.pageId);
       }}
@@ -523,6 +526,22 @@ function usePagePreviews(pageIds: string[], refreshKey: unknown) {
   return previews;
 }
 
+/** 카드를 끄는 동안 다른 카드와 맞춰진 선 (캔버스 좌표로 그리고, 확대해도 1px 로 보이게 굵기를 나눈다) */
+function GuideLines({ vertical, horizontal }: { vertical?: GuideLine; horizontal?: GuideLine }) {
+  const zoom = useStore((state) => state.transform[2]);
+  const thickness = 1 / zoom;
+  return (
+    <ViewportPortal>
+      {vertical && (
+        <div className="canvas-guide" style={{ left: vertical.at - thickness / 2, top: vertical.from, width: thickness, height: vertical.to - vertical.from }} />
+      )}
+      {horizontal && (
+        <div className="canvas-guide" style={{ top: horizontal.at - thickness / 2, left: horizontal.from, height: thickness, width: horizontal.to - horizontal.from }} />
+      )}
+    </ViewportPortal>
+  );
+}
+
 type CanvasEditorProps = {
   pageId: string;
   authSession: AuthSession;
@@ -654,6 +673,7 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
 
   // 그룹을 끌기 시작할 때 그 안에 완전히 들어 있던 카드 (끄는 동안 지나치는 카드는 따라오지 않게 시작할 때 정한다)
   const groupCargoRef = useRef<Set<string>>(new Set());
+  const [guides, setGuides] = useState<{ vertical?: GuideLine; horizontal?: GuideLine } | null>(null);
   const onNodeDragStart = (_event: unknown, _node: Node, dragged: Node[]) => {
     const groupIds = new Set(dragged.filter((n) => n.type === "group").map((n) => n.id));
     const cargo = cardsInsideGroups(canvas.nodes, groupIds);
@@ -663,12 +683,27 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
   };
   const onNodeDragStop = () => {
     groupCargoRef.current = new Set();
+    setGuides(null);
   };
 
   const onNodesChange = (changes: NodeChange<Node<CardData>>[]) => {
     const nextSelected = new Set(selected);
     let selectionChanged = false;
     const byId = new Map(canvas.nodes.map((n) => [n.id, n]));
+    // 카드 하나를 끄는 중이면 다른 카드의 가장자리·가운데에 맞춰 살짝 붙이고 안내선을 보여 준다
+    const moves = changes.filter((c): c is Extract<NodeChange<Node<CardData>>, { type: "position" }> => c.type === "position" && Boolean(c.position));
+    if (moves.length === 1 && moves[0].dragging && !readOnly) {
+      const move = moves[0];
+      const card = byId.get(move.id);
+      if (card) {
+        const others = canvas.nodes.filter((n) => n.id !== move.id && !groupCargoRef.current.has(n.id));
+        const result = alignmentGuides({ x: move.position!.x, y: move.position!.y, width: card.width, height: card.height }, others);
+        move.position = { x: result.x, y: result.y };
+        setGuides(result.vertical || result.horizontal ? { vertical: result.vertical, horizontal: result.horizontal } : null);
+      }
+    } else if (moves.some((c) => c.dragging === false)) {
+      setGuides(null);
+    }
     doc.transact(() => {
       for (const change of changes) {
         if (change.type === "position" && change.position && !readOnly) {
@@ -855,10 +890,11 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} size={1} />
+        {guides && <GuideLines vertical={guides.vertical} horizontal={guides.horizontal} />}
         {!readOnly && selectedCards.length > 0 && (
           <NodeToolbar nodeId={selectedCards.map((c) => c.id)} isVisible position={Position.Top} offset={12} className="canvas-selection-toolbar">
             <ColorSwatches value={sharedValue(selectedCards.map((c) => c.color))} onChange={setCardsColor} />
-            {selectedCards.every((c) => c.type === "text") && (
+            {selectedCards.every((c) => c.type === "text" || c.type === "page") && (
               <AlignControls
                 cards={selectedCards}
                 onChange={(patch) => doc.transact(() => selectedCards.forEach((card) => upsertCanvasNode(doc, card.id, patch)))}
@@ -994,11 +1030,17 @@ function CanvasEditor({ pageId, authSession, pages, pagesById, readOnly, onOpenP
           </Panel>
         )}
         {canvas.nodes.length === 0 && status === "synced" && (
-          <Panel position="top-center" className="canvas-empty-hint">
-            {readOnly
-              ? "빈 캔버스입니다."
-              : "빈 곳을 더블클릭해 메모를 만들거나, 사이드바의 페이지를 끌어다 놓으세요. 카드 가장자리를 끌어 다른 카드나 빈 곳에 놓으면 선으로 이어집니다."}
-          </Panel>
+          // 도구 모음과 겹치지 않게 가운데에 흐린 글자로 두고, 클릭·더블클릭은 그대로 캔버스로 보낸다
+          <div className="canvas-empty-hint" aria-live="polite">
+            {readOnly ? (
+              "빈 캔버스입니다."
+            ) : (
+              <>
+                <strong>빈 곳을 더블클릭해 메모 만들기</strong>
+                <span>사이드바의 페이지를 끌어다 놓거나, 카드 가장자리를 끌어 선으로 이으세요.</span>
+              </>
+            )}
+          </div>
         )}
       </ReactFlow>
     </div>

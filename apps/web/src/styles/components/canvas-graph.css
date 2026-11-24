@@ -293,13 +293,24 @@
 }
 
 .canvas-empty-hint {
-  top: 72px;
-  max-width: 360px;
-  padding: 10px 14px;
-  border-radius: var(--ds-radius-md);
-  background: var(--ds-bg-surface);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  width: min(320px, calc(100% - 32px));
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   text-align: center;
-  box-shadow: var(--ds-shadow-xs);
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.canvas-empty-hint strong {
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-medium);
 }
 
 .canvas-message {
@@ -394,6 +405,44 @@
 .canvas-card--align-right .canvas-card__text,
 .canvas-card--align-right .canvas-card__textarea {
   text-align: right;
+}
+
+/* 페이지 카드: 제목 줄과 미리보기를 함께 정렬한다 (미리보기는 내용만큼 줄어들어야 세로 가운데가 된다) */
+.canvas-card--page.canvas-card--align-center .canvas-card__title {
+  justify-content: center;
+}
+.canvas-card--page.canvas-card--align-right .canvas-card__title {
+  justify-content: flex-end;
+}
+.canvas-card--page.canvas-card--align-center .canvas-card__title-text,
+.canvas-card--page.canvas-card--align-right .canvas-card__title-text {
+  flex: 0 1 auto;
+}
+.canvas-card--page.canvas-card--align-center .canvas-card__body,
+.canvas-card--page.canvas-card--align-center .canvas-card__excerpt {
+  text-align: center;
+}
+.canvas-card--page.canvas-card--align-right .canvas-card__body,
+.canvas-card--page.canvas-card--align-right .canvas-card__excerpt {
+  text-align: right;
+}
+.canvas-card--page.canvas-card--valign-middle {
+  justify-content: center;
+}
+.canvas-card--page.canvas-card--valign-bottom {
+  justify-content: flex-end;
+}
+.canvas-card--page.canvas-card--valign-middle .canvas-card__body,
+.canvas-card--page.canvas-card--valign-bottom .canvas-card__body {
+  flex: 0 1 auto;
+}
+
+/* 카드를 끄는 동안 맞춰진 선 */
+.canvas-guide {
+  position: absolute;
+  z-index: 1000;
+  background: #ef4444;
+  pointer-events: none;
 }
 
 /* 목록·체크 줄은 flex 라 text-align 대신 줄 자체를 민다 */
