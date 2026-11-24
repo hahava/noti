@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PreviewBlocks } from "./PageHistory";
-import { pageBlocksToTemplate, type PageTemplate } from "./templates";
+import { workspaceApi } from "./api";
+import { pageBlocksToTemplate, templateCollectionIds, type PageTemplate } from "./templates";
 
 const RECENT_KEY = "noty.recentTemplates";
 
@@ -269,11 +270,33 @@ export function TemplateSaveDialog({
   const [structureOnly, setStructureOnly] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 데이터베이스는 최신 구성(속성·수식·보기)을 서버에서 받아 담는다
+  const collectionIds = useMemo(() => (pageBlocks ? templateCollectionIds(pageBlocks) : []), [pageBlocks]);
+  const [latestCollections, setLatestCollections] = useState<Map<string, unknown> | null>(collectionIds.length ? null : new Map());
+  useEffect(() => {
+    if (!collectionIds.length) return;
+    let cancelled = false;
+    void Promise.all(
+      collectionIds.map((id) =>
+        workspaceApi
+          .getCollection(id)
+          .then(({ data }) => [id, data] as const)
+          .catch(() => null), // 못 받으면 블록에 든 값으로 저장한다
+      ),
+    ).then((entries) => {
+      if (!cancelled) setLatestCollections(new Map(entries.filter((entry): entry is readonly [string, any] => Boolean(entry))));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionIds]);
   const blocks = useMemo(
-    () => (pageBlocks ? pageBlocksToTemplate(pageBlocks, structureOnly) : undefined),
-    [pageBlocks, structureOnly],
+    () => (pageBlocks && latestCollections ? pageBlocksToTemplate(pageBlocks, structureOnly, latestCollections) : undefined),
+    [pageBlocks, structureOnly, latestCollections],
   );
-  const droppedLinked = pageBlocks ? JSON.stringify(pageBlocks).match(/"type":"(page|collection)"/) : null;
+  const droppedLinked = pageBlocks ? JSON.stringify(pageBlocks).match(/"type":"(page|canvas)"/) : null;
+  // 받아 오는 동안 저장하면 데이터베이스가 빠진 채 저장되므로 기다린다
+  const loadingCollections = Boolean(pageBlocks) && !latestCollections;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -282,7 +305,7 @@ export function TemplateSaveDialog({
   }, [onClose]);
 
   const submit = async () => {
-    if (!name.trim() || saving) return;
+    if (!name.trim() || saving || loadingCollections) return;
     setSaving(true);
     setError(null);
     try {
@@ -335,7 +358,7 @@ export function TemplateSaveDialog({
           <>
             <label className="template-save__check">
               <input type="checkbox" checked={structureOnly} onChange={(e) => setStructureOnly(e.target.checked)} />
-              내용은 비우고 구조만 저장 (제목·굵은 라벨·목록 모양만 남김)
+              내용은 비우고 구조만 저장 (제목·굵은 라벨·목록 모양만 남기고, 데이터베이스는 속성·보기만 남김)
             </label>
             <div className="template-save__preview" aria-label="저장될 내용 미리보기">
               {blocks.length > 0 ? (
@@ -345,7 +368,7 @@ export function TemplateSaveDialog({
               )}
             </div>
             {droppedLinked && (
-              <p className="template-save__note">하위 페이지와 데이터베이스는 템플릿에 포함되지 않습니다.</p>
+              <p className="template-save__note">하위 페이지는 템플릿에 포함되지 않습니다.</p>
             )}
           </>
         )}
@@ -359,8 +382,8 @@ export function TemplateSaveDialog({
           <button type="button" className="ds-btn ds-btn--md ds-btn--outline" onClick={onClose}>
             취소
           </button>
-          <button type="submit" className="ds-btn ds-btn--md ds-btn--primary" disabled={!name.trim() || saving}>
-            {saving ? "저장 중…" : "저장"}
+          <button type="submit" className="ds-btn ds-btn--md ds-btn--primary" disabled={!name.trim() || saving || loadingCollections}>
+            {saving ? "저장 중…" : loadingCollections ? "표 구성 불러오는 중…" : "저장"}
           </button>
         </div>
       </form>

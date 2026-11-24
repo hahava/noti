@@ -14,6 +14,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { emptyHistory, recordVisit, stepHistory, type NavHistory } from "./nav-history";
 import {
   BlockNoteEditor,
   BlockNoteSchema,
@@ -50,7 +51,7 @@ import { LinkPasteMenu, createBookmarkBlockSpec, createEmbedBlockSpec, createToc
 import { safeHttpUrl } from "./link-embeds";
 import { NotionImportDialog } from "./NotionImport";
 import { TemplatePanel, TemplateSaveDialog, TemplateSvgIcon } from "./TemplatePanel";
-import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, type PageTemplate } from "./templates";
+import { USER_TEMPLATE_CATEGORY, clearLegacyUserTemplates, takeLegacyUserTemplates, unlinkedCollectionDataJson, type PageTemplate } from "./templates";
 import type { UserTemplateRecord } from "./api";
 import {
   createReactBlockSpec,
@@ -1378,6 +1379,28 @@ function EditorPane({
             if (rect) setLinkPaste({ blockId: cursorBlock.id, url: pastedUrl, x: rect.left, y: rect.bottom });
           });
           return true;
+        }
+        // 데이터베이스를 복사해 붙이면 원본과 연결되지 않은 새 표로 만든다 (속성·수식·보기는 그대로, 기록은 비움).
+        // 그냥 두면 블록이 같은 데이터베이스 id 를 가져와 원본과 연결되어 버린다.
+        const html = event.clipboardData?.getData("blocknote/html") || event.clipboardData?.getData("text/html") || "";
+        if (html.includes('data-content-type="collection"')) {
+          const collect = (blocks: any[], into: any[] = []) => {
+            for (const block of blocks) {
+              into.push(block);
+              if (block.children?.length) collect(block.children, into);
+            }
+            return into;
+          };
+          const before = new Set(collect(currentEditor.document).map((block: any) => block.id));
+          const handled = defaultPasteHandler();
+          window.setTimeout(() => {
+            // 블록에 적혀 있는 양식으로 바로 바꾼다 (원본에 접속하지 않으므로 다른 워크스페이스에서 복사해 와도 된다)
+            const pasted = collect(currentEditor.document).filter((block: any) => block.type === "collection" && !before.has(block.id));
+            for (const block of pasted) {
+              currentEditor.updateBlock(block.id, { props: { dataJson: unlinkedCollectionDataJson(block.props.dataJson, false) } } as any);
+            }
+          }, 0);
+          return handled;
         }
         return defaultPasteHandler();
       },
@@ -3360,6 +3383,45 @@ export default function App() {
     }
   };
 
+  // 탭마다 방문 기록: 페이지가 바뀔 때마다 남기고, ⌘[ / ⌘] 로 오갈 때는 남기지 않는다
+  const navHistoryRef = useRef(new Map<string, NavHistory>());
+  const pendingNavRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    const histories = navHistoryRef.current;
+    for (const tab of tabs) {
+      const history = histories.get(tab.id) ?? emptyHistory();
+      if (pendingNavRef.current.get(tab.id) === tab.pageId) {
+        pendingNavRef.current.delete(tab.id);
+        histories.set(tab.id, history);
+      } else {
+        histories.set(tab.id, recordVisit(history, tab.pageId));
+      }
+    }
+    for (const id of [...histories.keys()]) if (!tabs.some((tab) => tab.id === id)) histories.delete(id);
+  }, [tabs]);
+
+  const navigateHistory = (direction: "back" | "forward") => {
+    if (!activeTab) return;
+    const history = navHistoryRef.current.get(activeTab.id);
+    if (!history) return;
+    const step = stepHistory(history, direction, (id) => id === HOME_PAGE_ID || pagesById.has(id));
+    if (!step) return;
+    navHistoryRef.current.set(activeTab.id, step.history);
+    pendingNavRef.current.set(activeTab.id, step.target);
+    void handleSelectPage(step.target, { targetTabId: activeTab.id });
+  };
+
+  // 마우스의 뒤로/앞으로 버튼
+  useEffect(() => {
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return;
+      event.preventDefault();
+      navigateHistory(event.button === 3 ? "back" : "forward");
+    };
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  });
+
   // 전역 단축키 (⌘K 검색, ⌘\ 사이드바, ⌘T 새 탭, ⌘W 탭 닫기)
   useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
@@ -3368,6 +3430,11 @@ export default function App() {
         setIsSearchModalOpen((prev) => !prev);
         setSearchQuery("");
         setSearchSelectedIndex(0);
+      } else if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && (event.code === "BracketLeft" || event.code === "BracketRight")) {
+        // ⌘[ 뒤로, ⌘] 앞으로 (노션·브라우저와 같음). 한글 입력 중에도 되게 key 대신 code 로 본다.
+        event.preventDefault();
+        event.stopPropagation();
+        navigateHistory(event.code === "BracketLeft" ? "back" : "forward");
       } else if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
         event.preventDefault();
         setIsSidebarOpen((prev) => !prev);

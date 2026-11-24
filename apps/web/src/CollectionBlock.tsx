@@ -1116,10 +1116,13 @@ function CollectionBlockComponent({
   blockId,
   dataJson,
   onChangeDataJson,
+  editable = true,
 }: {
   blockId: string;
   dataJson: string;
   onChangeDataJson: (nextJson: string) => void;
+  /** 읽기 전용이면 블록 속성(dataJson)을 고치지 않는다 */
+  editable?: boolean;
 }) {
   const {
     parentPageId,
@@ -1236,6 +1239,19 @@ function CollectionBlockComponent({
   }, [sharedMap, activeSession]);
 
   const data = sharedMap ? sharedData ?? activeSession!.initialData : legacyData;
+
+  // 블록 안에 양식(제목·속성·수식·보기, 기록 제외)을 최신으로 적어 둔다. 복사·붙여넣기나 템플릿이
+  // 원본 데이터베이스에 닿지 못해도(다른 워크스페이스·서버, 원본 삭제) 이 값으로 같은 양식을 만든다.
+  const structureSnapshot = useMemo(() => {
+    if (!sharedMap || !sharedData) return null;
+    const { rows: _rows, ...structure } = sharedData;
+    return JSON.stringify({ ...structure, rows: [], collectionId });
+  }, [sharedMap, sharedData, collectionId]);
+  useEffect(() => {
+    if (!editable || !structureSnapshot || structureSnapshot === dataJson) return;
+    const timer = window.setTimeout(() => onChangeDataJson(structureSnapshot), 1500);
+    return () => window.clearTimeout(timer);
+  }, [editable, structureSnapshot, dataJson]);
 
   // Focus newly added row title input automatically
   useEffect(() => {
@@ -4023,6 +4039,7 @@ export const createCollectionBlockSpec = createReactBlockSpec(
       <CollectionBlockComponent
         blockId={props.block.id}
         dataJson={props.block.props.dataJson}
+        editable={props.editor.isEditable}
         onChangeDataJson={(nextJson) => {
           props.editor.updateBlock(props.block, {
             type: "collection",
