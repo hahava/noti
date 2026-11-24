@@ -10,7 +10,7 @@ import {
  * - 프리셋(variant)만 저장하고 색상/아이콘 스타일은 디자인 시스템(styles/editor/callout.css,
  *   tokens.css의 --ds-callout-*)에서 일괄 관리합니다.
  */
-export const CALLOUT_VARIANTS = ["note", "info", "tip", "warning", "danger", "idea"] as const;
+export const CALLOUT_VARIANTS = ["default", "note", "info", "tip", "warning", "danger", "idea"] as const;
 export type CalloutVariant = (typeof CALLOUT_VARIANTS)[number];
 
 export const CALLOUT_PRESETS: Record<
@@ -23,6 +23,14 @@ export const CALLOUT_PRESETS: Record<
     aliases: string[];
   }
 > = {
+  // 노션 기본 콜아웃처럼 색 막대·테두리 없이 회색 바탕만
+  default: {
+    label: "기본",
+    emoji: "💬",
+    description: "회색 바탕의 기본 콜아웃",
+    sampleText: "강조하고 싶은 내용을 적어 보세요.",
+    aliases: ["callout", "default", "gray", "grey", "콜아웃", "기본", "회색"],
+  },
   note: {
     label: "메모",
     emoji: "📝",

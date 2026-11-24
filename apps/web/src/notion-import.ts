@@ -227,7 +227,7 @@ export function extractAsides(markdown: string): { markdown: string; asides: str
 }
 
 /** Notion 콜아웃은 아이콘(이모지)을 글 앞에 둔다 → Noty 콜아웃 종류로 바꾸고 글에서는 뺀다 */
-const CALLOUT_BY_EMOJI: Record<string, string> = { "💡": "info", "ℹ️": "info", "⚠️": "warning", "⚠": "warning", "🚨": "danger", "❗": "danger", "❌": "danger", "✅": "tip", "👍": "tip", "📝": "note", "📌": "note", "✨": "idea", "🔥": "idea" };
+const CALLOUT_BY_EMOJI: Record<string, string> = { "💬": "default", "💡": "info", "ℹ️": "info", "⚠️": "warning", "⚠": "warning", "🚨": "danger", "❗": "danger", "❌": "danger", "✅": "tip", "👍": "tip", "📝": "note", "📌": "note", "✨": "idea", "🔥": "idea" };
 export function calloutFromAside(text: string): { variant: string; text: string } {
   const match = text.match(/^(\p{Extended_Pictographic}\uFE0F?)\s*/u);
   if (!match) return { variant: "info", text };

@@ -13,7 +13,7 @@ type ParseMarkdown = (markdown: string) => Block[];
 
 /** 일반 마크다운 변환기에 그대로 맡기는 블록 */
 const PLAIN_TYPES = new Set(["paragraph", "heading", "bulletListItem", "numberedListItem", "checkListItem", "quote", "codeBlock", "table", "image", "divider"]);
-const CALLOUT_EMOJI: Record<string, string> = { note: "📝", info: "💡", tip: "✅", warning: "⚠️", danger: "🚨", idea: "✨" };
+const CALLOUT_EMOJI: Record<string, string> = { default: "💬", note: "📝", info: "💡", tip: "✅", warning: "⚠️", danger: "🚨", idea: "✨" };
 
 function isPlain(block: Block): boolean {
   if (!PLAIN_TYPES.has(block.type) || block.props?.isToggleable) return false;

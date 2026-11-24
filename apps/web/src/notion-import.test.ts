@@ -73,6 +73,7 @@ test("row page property lines and callouts", () => {
   assert.deepEqual(calloutFromAside("💡 tip text"), { variant: "info", text: "tip text" });
   assert.deepEqual(calloutFromAside("⚠️ careful"), { variant: "warning", text: "careful" });
   assert.deepEqual(calloutFromAside("plain"), { variant: "info", text: "plain" });
+  assert.deepEqual(calloutFromAside("💬 gray"), { variant: "default", text: "gray" }, "default (gray) callout round-trips");
 });
 
 /** 테스트용 마크다운 변환: 제목·이미지·링크 한 줄 정도만 */

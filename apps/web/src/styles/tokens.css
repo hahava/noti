@@ -131,6 +131,7 @@
   --ds-label-red-bg: rgba(var(--ds-rgb-rose), 0.15);
 
   /* Callout Palette (에디터 콜아웃 블록 · bg는 은은하게, border는 한 단계 진하게) */
+  --ds-callout-default-bg: rgba(var(--ds-rgb-ink), 0.055);
   --ds-callout-note-bg: rgba(var(--ds-rgb-ink), 0.04);
   --ds-callout-note-border: rgba(var(--ds-rgb-ink), 0.12);
   --ds-callout-info-bg: rgba(var(--ds-rgb-accent), 0.07);
